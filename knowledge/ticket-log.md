@@ -1,22 +1,13 @@
-# Ticket log (seed)
+# Ticket log (seed bundled with the plugin)
 
-This is the seed copy. The live copy lives at `_knowledge/ticket-log.md` in the shared SharePoint folder.
+This file ships with the plugin. The live ticket log is **not** a separate file -- it lives as a sequence of `## Case: {ticket_key}` blocks inside the shared SharePoint memory file:
 
-Rolling 30-day log of every ticket processed by the Copilot. Updated by `/triage`, `/triage-board`, `/triage-inbox`, and `/reply-and-close`. Entries older than 30 days are pruned automatically (older tickets remain searchable in Jira).
+```
+myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md
+```
 
-## Columns
+Every n8n filing run (triggered by `/triage`, `/triage-board`, `/triage-inbox`, `/file-to-sharepoint`, or `/reply-and-close`) appends a new `## Case:` block to the memory file. The block includes a timestamp, the matter type, priority, SLA, jurisdictions, risk flags, the Devil's advocate verdict, the list of filed documents (with SharePoint URLs), and the action taken.
 
-| Column | Meaning |
-|---|---|
-| Date | Date of the row's last update |
-| Ticket | Jira key |
-| Subject | Ticket summary |
-| Type | One of the 10 matter types |
-| Priority | Critical / High / Medium / Low |
-| Action | Triaged + draft ready / Replied + closed / Merged into <key> / Conflict escalated / Clarification requested / SLA warning |
-| Outcome | Pending lawyer review / Closed / Reopened / Awaiting clarification |
+Older case entries remain in the memory file as the team's audit trail. They're not pruned -- the memory file is the canonical record of what the Copilot has done. (Older tickets remain independently searchable in Jira.)
 
-## Entries
-
-| Date | Ticket | Subject | Type | Priority | Action | Outcome |
-|------|--------|---------|------|----------|--------|---------|
+## Format of a case block (inside t

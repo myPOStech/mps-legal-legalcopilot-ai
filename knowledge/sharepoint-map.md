@@ -1,16 +1,24 @@
-# SharePoint filing map (seed -- editable by lawyers)
+# SharePoint filing map
 
-This is the seed. The live copy lives at `_knowledge/sharepoint-map.md` in the shared SharePoint folder. Lawyers can edit the live copy directly to change folder names, add per-matter-type overrides, or adjust filename templates -- no developer needed.
+These are the filing rules the `sharepoint-filer` skill uses when it calls the n8n `Legal Copilot` workflow. They define what `case_folder` value the workflow receives for each matter type, which determines where uploaded documents land under `Shared Documents/myPOS Legal/`.
 
-The `sharepoint-filer` skill reads this file at the start of every filing operation. Changes take effect on the next file operation.
+To rename a folder: change the right-hand column below AND rename the folder on SharePoint to match (the workflow uses the literal name from the payload). Re-publish the plugin and run `/plugin update`.
+
+---
+
+## SharePoint root
+
+```
+https://mypos0.sharepoint.com/sites/legal
+└── Shared Documents/
+    └── myPOS Legal/      ← all case folders + the shared memory file live here
+```
 
 ---
 
 ## Top-level folders
 
-These are the top-level folders inside the team's shared SharePoint root. Each matter type maps to one folder.
-
-| Matter type | Folder name |
+| Matter type | `case_folder` value (used by the n8n workflow) |
 |---|---|
 | NDA | `NDAs` |
 | Contract review | `Contract Reviews` |
@@ -23,17 +31,13 @@ These are the top-level folders inside the team's shared SharePoint root. Each m
 | Claims | `Claims` |
 | Inspection support | `Inspection Support` |
 
-To rename a folder: change the name in the right column above AND rename the folder on SharePoint to match. The Copilot picks up the change at the next filing operation.
-
----
-
-## Subfolder naming
+The workflow places uploaded documents at:
 
 ```
-<sanitised ticket summary, truncated to 80 chars>
+myPOS Legal/{case_folder}/{case_id}/
 ```
 
-If two tickets ever end up with the same subfolder name, the second one's folder gets the ticket key appended: `<summary> (LEGAL-XXXX)`.
+where `case_id` = the Jira ticket key (e.g., `LEGAL-4321`). There is no per-ticket subfolder by summary -- the ticket key IS the case-folder identifier. This means re-filing a ticket is idempotent.
 
 ---
 
@@ -46,18 +50,19 @@ If two tickets ever end up with the same subfolder name, the second one's folder
 | Role | Marker | Extension |
 |---|---|---|
 | Original draft | `v{N}` | `.docx` |
-| Devil's advocate review | `v{N}_review` | `.md` |
 | Attachment from Jira | `attachment_{original-stem}` | original |
 | Final email (sent) | `final` | `.eml` |
-| Comments thread | `comments` | `.md` |
+| Comments thread | `comments` | `.docx` |
 
-The `_review` files always sit in the same folder as the draft they reviewed -- never in a separate review folder.
+The Devil's advocate review is **not** filed as a separate file. Its findings are embedded as Word comments inside the draft `.docx` (one anchored comment per finding, plus a verdict summary comment). All triage outputs are `.docx` -- never `.md` (except the shared memory file, which is markdown by design).
+
+The n8n workflow uploads with `overwrite=true`, so the `sharepoint-filer` skill picks the next free `v{N}` by listing the case folder via `mcp__microsoft-365__sharepoint_list_items` (read-only, reliable) before each upload.
 
 ---
 
 ## Per-matter-type overrides
 
-By default, files for a ticket are filed under `{matter-type-folder}/{ticket-summary}/`. To change this for a specific matter type, add a section below.
+By default, files for a ticket are filed under `{case_folder}/{ticket_key}/`. To group files differently for a specific matter type, add a section below. The skill respects forward slashes in `case_folder`, so the workflow will create intermediate folders as needed.
 
 ### Example overrides (not active by default)
 
@@ -65,24 +70,9 @@ By default, files for a ticket are filed under `{matter-type-folder}/{ticket-sum
 # Uncomment and edit to activate
 
 # nda:
-#   subfolder_pattern: "{counterparty}/{ticket_summary}"
-#   reason: "Group all NDAs with the same counterparty under one folder"
+#   case_folder_pattern: "NDAs/{counterparty}"
+#   reason: "Group all NDAs with the same counterparty under one parent folder"
 
 # inspection_support:
-#   subfolder_pattern: "{regulator}/{ticket_summary}"
-#   reason: "Group all matters with one regulator under one folder"
-```
-
-Variables available in `subfolder_pattern`:
-- `{ticket_summary}` -- the sanitised ticket summary (default)
-- `{ticket_key}` -- e.g., `LEGAL-4321`
-- `{counterparty}` -- if extracted from the ticket
-- `{regulator}` -- if extracted (only for regulatory-related matters)
-- `{jurisdiction}` -- if extracted
-- `{year}` -- e.g., `2026`
-
----
-
-## Active overrides
-
-*None at present. Add overrides to the section above if the team wants matter-specific filing.*
+#   case_folder_pattern: "Inspection Support/{regulator}"
+#   reason: "Group all matters with one regulator u

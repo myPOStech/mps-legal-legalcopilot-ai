@@ -1,107 +1,254 @@
 ---
 name: sharepoint-filer
-description: File legal matter documents (drafts, Devil's advocate reviews, attachments, sent emails) to the team's shared SharePoint folder using the team's filing convention. Reads filing rules from `_knowledge/sharepoint-map.md` so lawyers can change folder names and naming templates without code changes. Invoked by `/triage`, `/file-to-sharepoint`, and `/reply-and-close`.
+description: File triage outputs (drafts, attachments, sent emails, comment threads) directly into SharePoint by calling the team's n8n "Legal Copilot" workflow. The workflow creates the case folder, uploads every document, and appends an entry to the shared memory file at `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`. Returns the SharePoint URL of every uploaded file plus the memory-file URL so callers can cite them in Jira and chat. Replaces the old local-Desktop-mirroring flow -- no manual drag-and-drop required.
 ---
 
-# sharepoint-filer
+# SharePoint filer (n8n-backed)
 
-Files documents into the team's shared SharePoint folder using the convention defined in `_knowledge/sharepoint-map.md`. The filer is the single source of truth for "where does a file go and what is it named" -- every command that puts something in SharePoint goes through this skill.
+Push every triage output to SharePoint in one round trip by calling the team's n8n `Legal Copilot` workflow. The workflow creates the case subfolder, uploads each document, downloads-appends-uploads the shared memory file, and returns a JSON summary with the live SharePoint URL of every uploaded file.
+
+> **Why n8n:** the Microsoft 365 MCP cannot reliably write to SharePoint. The n8n workflow authenticates via a service-account OAuth credential and uses the SharePoint REST API directly, which is reliable. The workflow is the single source of truth for "where do legal triage outputs end up." When this skill calls the workflow, it does **not** need to know SharePoint paths, folder IDs, or auth -- the workflow owns all of that.
+
+## The n8n workflow
+
+| Property | Value |
+|---|---|
+| Name | `Legal Copilot` |
+| Workflow ID | `VAKq9Bra0RA0SdCO` |
+| Production webhook | `https://myposai.app.n8n.cloud/webhook/legal-copilot-filing` |
+| Method | `POST` |
+| Available in MCP | yes -- callable via `mcp__n8n__execute_workflow` |
+| What it does | Creates `/sites/legal/Shared Documents/myPOS Legal/{case_folder}/{case_id}/`, uploads each document, downloads the memory file, appends a markdown entry, re-uploads it, returns a JSON summary |
+| Memory file location | `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md` |
+| SharePoint root | `https://mypos0.sharepoint.com/sites/legal/Shared Documents/myPOS Legal/` |
 
 ## Inputs
 
-The calling command passes:
+The caller (`/triage`, `/file-to-sharepoint`, `/reply-and-close`, `/triage-board`, `/triage-inbox`) provides:
 
-- `ticket_key` (required) -- e.g., `LEGAL-4321`
-- `ticket_summary` (required) -- the Jira ticket summary (used for the subfolder name)
-- `matter_type` (required) -- one of the 10 matter types (NDA, contract review, regulatory question, corporate change, project, KYC support, GTCs, materials review, claims, inspection support)
-- `attachments` (optional) -- list of `{name, url}` for files to download from Jira and upload to SharePoint
-- `draft_text` (optional) -- the AI draft response, in markdown; saved as `.docx`
-- `review_text` (optional) -- the Devil's advocate review, in markdown; saved as `.md`
-- `final_email_eml` (optional) -- the sent message, downloaded as `.eml`; saved with the `_final.eml` suffix
-- `comments_thread` (optional) -- the Jira comment thread as markdown; saved as `comments.md` (only when caller passes it)
+| Input | Required | Description |
+|---|---|---|
+| `ticket_key` | yes | Jira key (e.g., `LEGAL-4321`). Becomes `case_id` in the n8n payload. |
+| `ticket_summary` | yes | Ticket title. Used in filenames and as part of the memory entry. |
+| `matter_type` | yes | One of the 10 matter types (NDA, contract review, regulatory question, corporate change, project, KYC support, GTCs, materials review, claims, inspection support). Maps to the matter-type folder name. |
+| `files` | yes | List of `{name, source, content_or_url, role, mime_type}` where `role` ∈ `{draft, attachment, final_email, comments}` and `mime_type` is the IANA type (e.g., `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `application/pdf`, `message/rfc822`). |
+| `review_findings` | optional | Devil's advocate findings. Embedded as anchored Word comments inside the draft `.docx` BEFORE base64-encoding. List of `{severity, location, issue, suggested_edit}`. |
+| `counterparty` | optional | If known, used in filenames; otherwise derived from the ticket. |
+| `memory_notes` | optional | Free-text notes the caller wants appended to the shared memory file. The skill builds the final `memory_instructions` markdown block from these + the structured triage metadata. |
+| `triage_metadata` | optional | Dict with priority, SLA, jurisdictions, risk flags, devil's-advocate verdict. Folded into `memory_instructions`. |
 
-## Step 1: Load filing rules
+## Output
 
-Read `_knowledge/sharepoint-map.md` from the configured shared SharePoint root (path in `${CLAUDE_PLUGIN_DATA}/sharepoint-config.json`). The map defines:
+Returns:
 
-- The matter-type → top-level folder mapping
-- The subfolder pattern (default: sanitised ticket summary, truncated to 80 chars)
-- The filename template
-- Per-matter-type overrides (if any)
-
-If the map file is missing, fall back to the seed at `${CLAUDE_PLUGIN_ROOT}/knowledge/sharepoint-map.md` and warn the caller.
-
-## Step 2: Resolve the destination folder
-
-1. Look up `matter_type` in the map. If not found, abort and return an error -- never invent a folder.
-2. Compute the ticket subfolder:
-   - Default pattern: take `ticket_summary`, replace `/`, `\`, `:`, `*`, `?`, `"`, `<`, `>`, `|` with `-`, collapse runs of whitespace and dashes, trim leading/trailing punctuation, truncate to 80 chars.
-   - If the result is empty, fall back to `ticket_key`.
-3. If a per-matter-type override is active in the map, apply it (e.g., `{counterparty}/{ticket_summary}` for NDAs).
-
-## Step 3: Resolve folder collisions
-
-Check whether the destination subfolder already exists via `mcp__microsoft-365__sharepoint_list_items`:
-
-| State | Action |
+| Field | Description |
 |---|---|
-| Doesn't exist | Create with `mcp__microsoft-365__sharepoint_create_folder` |
-| Exists, contains files prefixed with this ticket key | Use it (this is the same matter coming back) |
-| Exists, contains files prefixed with a different ticket key | Append ` (TICKET-KEY)` to the new folder name and create that |
+| `success` | Boolean. True when every document upload succeeded AND the memory-file write succeeded. |
+| `case_folder` | The matter-type folder path the workflow used (e.g., `NDAs`). |
+| `case_id` | The ticket key (echo). |
+| `sharepoint_folder_url` | The SharePoint URL of the case folder (browser-friendly). |
+| `documents_filed` | List of `{filename, sharepoint_url, status}` for each uploaded file. |
+| `memory_file_url` | The SharePoint URL of the shared memory file. |
+| `memory_file_updated` | Boolean. True when the workflow successfully re-uploaded the memory file. |
+| `chat_summary` | A multi-line string ready to print to chat (and to embed in the Jira comment) summarising what was filed and where. |
 
-## Step 4: Resolve filenames
+---
 
-Per the filename template in the map (default below):
+## Step 1: Resolve the matter-folder name
+
+Map the input `matter_type` to one of the 10 top-level folder names:
+
+| Matter type | `case_folder` value |
+|---|---|
+| NDA | `NDAs` |
+| Contract review | `Contract Reviews` |
+| Regulatory question | `Regulatory Questions` |
+| Corporate change | `Corporate Changes` |
+| Project | `Projects` |
+| KYC support | `KYC Support` |
+| GTCs | `GTCs` |
+| Materials review | `Materials Reviews` |
+| Claims | `Claims` |
+| Inspection support | `Inspection Support` |
+
+The team can override these in `knowledge/sharepoint-map.md`. If the file has a non-default mapping for this matter type, use that instead.
+
+The workflow builds the final SharePoint path as `myPOS Legal/{case_folder}/{case_id}/`. This skill does NOT need to know the SharePoint base URL -- the workflow owns it.
+
+---
+
+## Step 2: Compute filenames
+
+Filenames follow the team convention:
 
 ```
 {TICKET-KEY}_{counterparty-or-tag}_{YYYY-MM-DD}_{role-marker}.{ext}
 ```
 
-| Role | Marker | Extension |
-|---|---|---|
-| Original draft | `v{N}` | `.docx` |
-| Devil's advocate review | `v{N}_review` | `.md` |
-| Attachment from Jira | `attachment_{original-stem}` | original |
-| Final email (sent) | `final` | `.eml` |
-| Comments thread | `comments` | `.md` |
+| Variable | How to derive |
+|---|---|
+| `TICKET-KEY` | Input `ticket_key` |
+| `counterparty-or-tag` | Input `counterparty` if provided. Otherwise extract a 2-3 word slug from the ticket summary (capitalise, no spaces). |
+| `YYYY-MM-DD` | Today's date (lawyer's local date). |
+| `role-marker` | Per the table below. |
+| `ext` | Per the role. |
 
-`counterparty-or-tag` is derived from the ticket -- look for a company name in the description first; otherwise use a 3-word slug of the summary. `YYYY-MM-DD` is the current date. `v{N}` increments if a file with the same prefix already exists.
+| Role | Marker | Extension | Example |
+|---|---|---|---|
+| draft | `v{N}` | `.docx` | `LEGAL-4321_AcmeCorp_2026-04-27_v1.docx` |
+| attachment | `attachment_{original-stem}` | original | `LEGAL-4321_AcmeCorp_2026-04-27_attachment_NDA-Acme.pdf` |
+| final_email | `final` | `.eml` | `LEGAL-4321_AcmeCorp_2026-04-27_final.eml` |
+| comments | `comments` | `.docx` | `LEGAL-4321_AcmeCorp_2026-04-27_comments.docx` |
 
-The `_review` suffix on the Devil's advocate file ensures alphabetical sort places it next to the draft it reviewed -- they MUST end up in the same folder.
+**Versioning for drafts:** the workflow uploads with `overwrite=true`, so the skill is responsible for picking the right `v{N}`. Before calling the workflow, list the existing files in the case folder via `mcp__microsoft-365__sharepoint_list_items` (read-only, reliable). Pick the next free `v{N}`. If the read fails, default to `v1` and surface a warning in `chat_summary`.
 
-## Step 5: Upload
+**Attachment collisions:** if two attachments share an original-stem in the same call, append a counter: `attachment_NDA-Acme.pdf` → `attachment_NDA-Acme-2.pdf`.
 
-For each file the caller provided:
+---
 
-- Convert `draft_text` from markdown to `.docx` before upload (use the docx skill if available).
-- Save `review_text` as plain markdown.
-- Download Jira attachments via the Atlassian MCP, then upload to SharePoint with the prefixed filename.
-- Save the final email by downloading the sent message as `.eml` from Microsoft Graph.
+## Step 3: Build each document
 
-Use `mcp__microsoft-365__sharepoint_upload_file` for each. Capture the SharePoint URL of every uploaded file.
+For each file in the input list:
 
-## Step 6: Return
+1. **draft** -- convert to `.docx` (use the `docx` skill so the output is a real Word document). If `review_findings` is non-empty, embed each finding as a Word comment anchored to the `location` text range. Comment author = `Devil's advocate review`. Comment body =
+   ```
+   [{severity}] {issue}
+   Suggested edit: {suggested_edit}
+   ```
+   If `location` cannot be matched, attach to the first paragraph and prefix the body with `(general)`. Add a final summary comment on the document title with the verdict line: `Devil's advocate verdict: {approve | revise | escalate} -- {N} blockers, {M} concerns, {K} nits`.
 
-Return a JSON object the caller can use to build a Jira comment or chat summary:
+2. **comments** -- render the Jira comment thread as a `.docx` (one heading per comment, author + timestamp as a sub-heading, body as paragraphs). Never `.md`.
+
+3. **final_email** -- fetch the `.eml` from Outlook by message ID (use `mcp__microsoft-365__outlook_email_search` to confirm the message and its raw MIME, or save the message body + headers as `.eml` directly).
+
+4. **attachment** -- download from the source (Jira attachment URL via `mcp__atlassian__fetch` or the equivalent Atlassian MCP fetch).
+
+5. Read the resulting bytes from disk, base64-encode, and pair with the IANA `mime_type`.
+
+---
+
+## Step 4: Build `memory_instructions`
+
+The shared memory file lives at `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`. The workflow appends the `memory_instructions` string to it under a new `## Case: {case_id}` heading (the workflow adds the heading and timestamp).
+
+The skill builds the markdown body using the triage metadata + the caller's `memory_notes`:
+
+```markdown
+**Matter type:** {matter_type}
+**Priority:** {triage_metadata.priority} | **SLA:** {triage_metadata.sla_days}d
+**Jurisdictions:** {triage_metadata.jurisdictions or "unspecified"}
+**Skill used:** {triage_metadata.legal_triage_skill}
+**Devil's advocate verdict:** {triage_metadata.da_verdict}
+{if triage_metadata.risk_flags: "**Risk flags:** {flags}"}
+{if triage_metadata.human_review_required: "**Lawyer review required before send.**"}
+
+{caller's memory_notes -- typically: action taken, lawyer feedback summary, any pattern updates}
+```
+
+If `memory_notes` is empty and `triage_metadata` is empty, the body is just `Filed by Legal Copilot.` -- the workflow still appends a timestamped entry so the audit trail is complete.
+
+---
+
+## Step 5: Call the n8n workflow
+
+Use `mcp__n8n__execute_workflow` (or POST the webhook directly with `mcp__workspace__bash` curl as a fallback). The MCP route is preferred -- it's auth-free for workflows in our project and gives us the execution ID.
+
+**Payload shape:**
 
 ```json
 {
-  "folder_url": "https://...",
-  "files": [
-    { "role": "draft", "name": "...", "url": "..." },
-    { "role": "review", "name": "...", "url": "..." },
-    { "role": "attachment", "name": "...", "url": "..." },
-    { "role": "final_email", "name": "...", "url": "..." }
-  ],
-  "warnings": []
+  "type": "webhook",
+  "webhookData": {
+    "method": "POST",
+    "body": {
+      "case_id": "LEGAL-4321",
+      "case_folder": "NDAs",
+      "documents": [
+        {
+          "filename": "LEGAL-4321_AcmeCorp_2026-04-27_v1.docx",
+          "content_base64": "<base64 string>",
+          "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        },
+        {
+          "filename": "LEGAL-4321_AcmeCorp_2026-04-27_attachment_NDA-Acme.pdf",
+          "content_base64": "<base64 string>",
+          "mime_type": "application/pdf"
+        }
+      ],
+      "memory_instructions": "**Matter type:** NDA\n**Priority:** Medium | **SLA:** 5d\n..."
+    }
+  }
 }
 ```
 
+Call:
+
+```
+mcp__n8n__execute_workflow(
+  workflowId = "VAKq9Bra0RA0SdCO",
+  executionMode = "production",
+  inputs = <payload above>
+)
+```
+
+Wait for the response. Production runs respond synchronously through the workflow's `Respond to Webhook` node.
+
+**Curl fallback (if the MCP is unavailable):**
+
+```bash
+curl -sS -X POST https://myposai.app.n8n.cloud/webhook/legal-copilot-filing \
+  -H 'Content-Type: application/json' \
+  -d @payload.json
+```
+
+Pipe the JSON response into the same parsing logic.
+
+---
+
+## Step 6: Parse the response
+
+The workflow returns:
+
+```json
+{
+  "success": true,
+  "case_id": "LEGAL-4321",
+  "message": "Case LEGAL-4321 filed successfully...",
+  "documents_filed": [
+    { "filename": "...", "sharepoint_url": "https://mypos0.sharepoint.com/...", "status": "success" }
+  ],
+  "memory_file_updated": true,
+  "memory_file_path": "myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md"
+}
+```
+
+Build the skill's return object from this:
+
+```json
+{
+  "success": true,
+  "case_folder": "NDAs",
+  "case_id": "LEGAL-4321",
+  "sharepoint_folder_url": "https://mypos0.sharepoint.com/sites/legal/Shared Documents/myPOS Legal/NDAs/LEGAL-4321/",
+  "documents_filed": ["...passthrough..."],
+  "memory_file_url": "https://mypos0.sharepoint.com/sites/legal/Shared Documents/myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md",
+  "memory_file_updated": true,
+  "chat_summary": "<the workflow's `message` field, lightly reformatted>"
+}
+```
+
+If the workflow returns `success: false` OR HTTP non-200, surface the full error in `chat_summary` and return `success: false`. The caller MUST NOT proceed to "post triage comment to Jira" or "transition to Done" if `success: false`.
+
+---
+
+## Step 7: Return result
+
+The caller pipes `chat_summary` straight into:
+- The `/triage` chat output to the lawyer
+- The Jira AI Triage comment (the SharePoint URLs are clickable in Jira's markdown)
+
+---
+
 ## Hard rules
 
-- NEVER overwrite an existing file -- always increment `v{N}`.
-- NEVER move files between folders without explicit caller instruction.
-- NEVER strip the ticket key from filenames -- it is the cross-reference back to Jira.
-- NEVER place Devil's advocate review files anywhere other than the same folder as the work they reviewed.
-- NEVER invent a matter-type → folder mapping. If the map doesn't have it, abort and return an error.
-- If any upload fails (auth, quota, network), report the failure clearly and DO NOT silently skip files.
+- **NEVER bypass the n8n workflow.** Programmatic SharePoint writes via the M365 MCP are unreliable in this deployment; this skill exist

@@ -5,6 +5,4 @@ description: STUB reference to the published `legal-triage-regulatory-question` 
 
 # legal-triage-regulatory-question (stub reference)
 
-Stub. Actual body published as `anthropic-skills:legal-triage-regulatory-question`.
-
-**Hard rule:** any output from this skill where the source is an actual regulator (rather than an internal team asking a regulatory question) triggers `human_review_required = true` per the risk gates in `commands/triage.md`.
+Stub. Actual body published as `anthropic-skills:legal-triage-regulatory-question`. See `skills/devils-advocate-review/SKILL.md`.

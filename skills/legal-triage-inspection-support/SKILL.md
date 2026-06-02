@@ -7,4 +7,4 @@ description: STUB reference to the published `legal-triage-inspection-support` s
 
 Stub. Actual body published as `anthropic-skills:legal-triage-inspection-support`.
 
-**Hard rule:** any output from this skill triggers `human_review_required = true` per the risk gates in `commands/triage.md`. Inspection-support matters always need a lawyer's eyes before any external response.
+**Hard rule:** any output from this skill triggers `human_review_required = true` per the risk gates in `commands/triage.md`.

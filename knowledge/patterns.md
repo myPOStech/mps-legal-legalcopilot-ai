@@ -1,21 +1,17 @@
-# Learned patterns (seed)
+# Learned patterns (seed bundled with the plugin)
 
-This is the seed copy. The live, growing copy lives at `_knowledge/patterns.md` in the shared SharePoint folder. The Copilot reads from there at the start of every run.
+This file ships with the plugin. It's the seed knowledge every fresh install starts from. Once the team is running, the live patterns are recorded inside the shared SharePoint memory file at:
 
-Patterns are added when 3+ lawyer corrections share a theme. They are NEVER auto-edited by the AI -- only proposed. A senior lawyer approves each pattern before it goes live.
+```
+myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md
+```
+
+The board sweep (`/triage-board`, Phase 1c) appends a `## Pattern: ...` block to that file when 3+ lawyer corrections share a theme. Patterns are NEVER auto-applied -- a senior lawyer reviews each proposed pattern in the memory file before the maintainer folds it into the next plugin release (i.e., back into this seed file).
 
 ## How to add a pattern manually
 
-A senior lawyer can add a pattern at any time by editing `_knowledge/patterns.md` on SharePoint. Format:
+A senior lawyer can add a pattern at any time by editing the memory file on SharePoint. Use this format inside the file (after the active `## Case:` blocks):
 
 ```markdown
 ## Pattern: <one-line title>
-**Source:** <ticket keys, comma-separated>
-**Rule:** <actionable rule the AI should follow>
-**Confidence:** <High | Medium | Low>
-**Affects skill:** <legal-triage-* skill name>
-```
-
-## Current patterns
-
-*No patterns recorded yet. Patterns are added automatically when 3+ lawyer corrections share a theme, or manually by a senior lawyer.*
+*

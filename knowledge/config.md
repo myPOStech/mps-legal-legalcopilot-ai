@@ -1,6 +1,6 @@
-# Configuration (seed -- copied to SharePoint by /setup-copilot)
+# Configuration
 
-This file documents what the team has configured. The live copy lives at `_knowledge/config.md` in the shared SharePoint folder; this file in the plugin is the seed used when first installing.
+What the team has configured for the Legal Copilot. This file ships with the plugin and documents the canonical settings; the live shared state lives on SharePoint at `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`.
 
 ## Jira board
 
@@ -9,25 +9,23 @@ This file documents what the team has configured. The live copy lives at `_knowl
 - **To-Do status:** `To Do`
 - **Default JQL:** `project in (LEGAL, AIRD) AND status = "To Do" ORDER BY created ASC`
 
-## SharePoint knowledge root
+## SharePoint
 
-Set during `/setup-copilot` -- written to each user's `${CLAUDE_PLUGIN_DATA}/sharepoint-config.json`.
+- **Site:** `https://mypos0.sharepoint.com/sites/legal`
+- **Root path for filed cases:** `Shared Documents/myPOS Legal/`
+- **Memory file:** `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`
+- **Top-level matter folders:** see `knowledge/sharepoint-map.md`
 
-Default proposed during setup: the Legal team's shared folder at `mypos0.sharepoint.com/sites/legal`.
+## n8n filing workflow
 
-## Schedule
+All SharePoint writes are routed through the team's n8n `Legal Copilot` workflow (because the Microsoft 365 MCP cannot reliably write to SharePoint).
 
-- **Daily run:** weekdays at 08:00 Europe/Sofia (registered as `legal-copilot-board-sweep`)
-- **Cron expression:** `TZ=Europe/Sofia 0 8 * * 1-5`
+- **Workflow name:** `Legal Copilot`
+- **Workflow ID:** `VAKq9Bra0RA0SdCO`
+- **Production webhook:** `https://myposai.app.n8n.cloud/webhook/legal-copilot-filing`
+- **HTTP method:** `POST`
+- **Available in MCP:** yes -- callable via `mcp__n8n__execute_workflow` with `executionMode: "production"`
+- **Required body fields:** `case_id`, `case_folder`, `documents` (array of `{filename, content_base64, mime_type}`), `memory_instructions`
+- **What it does:** creates `myPOS Legal/{case_folder}/{case_id}/`, uploads each document, downloads + appends + re-uploads the memory file, returns a JSON summary
 
-## Pilot users
-
-| Name | Role | Status |
-|---|---|---|
-| Ivan Troyanov | Pilot lawyer | v0.1 pilot |
-
-## Configuration history
-
-| Date | Change | By |
-|---|---|---|
-| (this section is appended automatically by /setup-copilot when run) | | |
+The Microsoft 365 MCP is still used for SharePoint **reads** (the read path i

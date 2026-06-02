@@ -1,22 +1,19 @@
-# Feedback log (seed)
+# Feedback log (seed bundled with the plugin)
 
-This is the seed copy. The live copy lives at `_knowledge/feedback-log.md` in the shared SharePoint folder.
+This file ships with the plugin. It's the seed format and starting point. The live feedback log lives inside the shared SharePoint memory file at:
 
-Captures the diff between the AI draft and what the lawyer actually sent. The board sweep (`/triage-board`, Phase 1b) and the close-out command (`/reply-and-close`, Step 7) both write to this file.
+```
+myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md
+```
 
-When 3+ entries share a theme (same category + matter type + jurisdiction), they're auto-promoted to a pattern proposal in `patterns.md` for senior lawyer review.
+Captures the diff between the AI draft and what the lawyer actually sent. The close-out command (`/reply-and-close`) appends a `### Lawyer feedback` block to the case entry inside the memory file. The board sweep (`/triage-board`, Phase 1b) reviews these blocks across the most recent week and proposes patterns when 3+ entries share a theme (same category + matter type + jurisdiction).
 
 ## Format
 
+Inside `legal_copilot_memory.md`, each lawyer-feedback entry is nested under the case's `## Case: {ticket_key}` block:
+
 ```markdown
-## <ticket_key> (<YYYY-MM-DD>)
+### Lawyer feedback ({ticket_key})
 **Skill used:** <legal-triage-* skill>
 **AI draft excerpt:** "<text the AI wrote>"
-**Lawyer changed to:** "<text the lawyer sent>"
-**Category:** <factual correction | tone | scope | jurisdiction-specific | other>
-**Captured by:** </reply-and-close | /triage-board>
-```
-
-## Entries
-
-*No feedback recorded yet. Entries are appended automatically as lawyers review and edit AI drafts.*
+**

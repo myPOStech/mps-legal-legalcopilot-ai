@@ -1,5 +1,5 @@
 ---
-description: Sweep unread emails in the legal inbox -- create Jira tickets for new matters and triage them.
+description: Sweep unread emails in the legal inbox -- create Jira tickets for new matters and triage them. Files outputs to SharePoint via n8n.
 argument-hint: [mailbox] [count] [filter]
 ---
 
@@ -13,6 +13,8 @@ Read unread emails in the legal mailbox, dedupe against existing Jira tickets, c
 - Default mailbox: `legal@mypos.com`
 - Default count: 10 emails
 - Process order: oldest first
+- n8n workflow ID: `VAKq9Bra0RA0SdCO`
+- Shared memory file: `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`
 
 ## Input
 
@@ -21,23 +23,17 @@ Read unread emails in the legal mailbox, dedupe against existing Jira tickets, c
 - A count (default: 10)
 - A filter (e.g., `from:compliance@mypos.com`, `last 24 hours`)
 
-## Phase 0: Verify configuration
-
-Read `${CLAUDE_PLUGIN_DATA}/sharepoint-config.json`. If missing, print:
-
-```
-Legal Copilot is not configured yet. Run /setup-copilot first.
-```
-
-and stop.
-
 ---
 
-## Phase 1: Load shared knowledge
+## Phase 1: Load shared knowledge from SharePoint
 
-Read from SharePoint:
-- `_knowledge/patterns.md`
-- `_knowledge/ticket-log.md`
+Use `mcp__microsoft-365__sharepoint_read_file` to read:
+
+```
+myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md
+```
+
+Plus the bundled seed `${CLAUDE_PLUGIN_ROOT}/knowledge/patterns.md`. If the SharePoint read fails, fall back to the seed and surface a one-line warning.
 
 ---
 
@@ -65,7 +61,7 @@ If no unread emails, print "Inbox clear -- no unread emails" and stop.
 JQL: project in (LEGAL, AIRD) AND statusCategory != Done AND summary ~ "{normalised subject}"
 ```
 
-Also check sender domain matches and `_knowledge/ticket-log.md` for >90% similar closed tickets.
+Also check sender domain matches and the recent `## Case:` entries inside `legal_copilot_memory.md` for >90% similar closed tickets.
 
 **Decisions:**
 
@@ -87,11 +83,13 @@ Also check sender domain matches and `_knowledge/ticket-log.md` for >90% similar
 
 ### 3d. Run the full triage flow on the new ticket
 
-Same as `commands/triage.md` Steps 4-9: classify with matching legal-triage skill, Devil's advocate review, file attachments via `sharepoint-filer`, create Outlook draft, post Jira comment, update knowledge.
+Same as `commands/triage.md` Steps 2-9: classify with matching legal-triage skill, Devil's advocate review, file outputs to SharePoint via the n8n workflow (`sharepoint-filer` skill), create Outlook draft, post Jira comment.
+
+If the n8n workflow fails for this ticket, capture the error and continue to the next email -- the new Jira ticket stays in To-Do for manual re-triage with `/triage <KEY>`.
 
 ### 3e. Mark email as read
 
-After successful triage, mark the source email as read and tag it (Outlook category `Triaged`) so it doesn't re-enter the queue.
+After successful triage **and successful filing**, mark the source email as read and tag it (Outlook category `Triaged`) so it doesn't re-enter the queue. If filing failed, leave the email unread so the next sweep retries it.
 
 ---
 
@@ -100,15 +98,17 @@ After successful triage, mark the source email as read and tag it (Outlook categ
 ```
 Inbox triage complete: {N} emails processed
 
-| # | From | Subject | Type | Priority | Risk | Jira |
-|---|------|---------|------|----------|------|------|
-| 1 | acme@... | NDA review request | NDA | Medium | none | LEGAL-4321 |
-| 2 | regulator@... | Information request | Inspection support | Critical | regulator | LEGAL-4322 |
+| # | From | Subject | Type | Priority | Risk | Jira | Filed |
+|---|------|---------|------|----------|------|------|-------|
+| 1 | acme@... | NDA review request | NDA | Medium | none | LEGAL-4321 | ✓ |
+| 2 | regulator@... | Information request | Inspection support | Critical | regulator | LEGAL-4322 | ✓ |
+| 3 | partner@... | Contract redline | Contract review | Low | none | LEGAL-4323 | ✗ (n8n failure) |
 
 {count} new tickets created
 {count} added to existing tickets
 {count} conflicts escalated
 {count} flagged for human review
+{count} n8n filing failures (need re-run)
 ```
 
 ---
@@ -117,10 +117,8 @@ Inbox triage complete: {N} emails processed
 
 - NEVER send emails -- only create drafts.
 - NEVER reply to the source email automatically -- the lawyer reviews the AI Drafts entry first.
-- NEVER mark an email as read until the corresponding Jira ticket has been triaged successfully.
+- NEVER mark an email as read until the corresponding Jira ticket has been triaged successfully **and** the n8n filing workflow returned `success: true`.
 - NEVER fabricate facts -- if information is missing, ask via the Jira ticket.
 - NEVER mention individuals by name -- use roles.
 - NEVER override risk gates.
-- Process oldest emails first (FIFO).
-- Use full country names for jurisdictions (`Bulgaria`, not `BG`).
-- Be conservative -- when uncertain, flag for human review.
+- NEVER bypass the n

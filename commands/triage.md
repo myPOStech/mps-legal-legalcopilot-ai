@@ -1,5 +1,5 @@
 ---
-description: Triage a single Jira ticket or pasted email -- classify, dedupe, draft, review, file, post.
+description: Triage a single Jira ticket or pasted email -- classify, dedupe, draft, three-pass review (legal -> Devil's advocate -> business), set Jira fields, auto-assign, file to SharePoint via n8n, post.
 argument-hint: <TICKET-KEY | jira URL | pasted email>
 ---
 
@@ -11,6 +11,9 @@ Triage a single legal request end-to-end. The ticket does **not** move to Done -
 
 - Atlassian Cloud ID: `fb47470f-f5c2-44bc-8182-f2a22f059adb`
 - Projects watched: `LEGAL`, `AIRD`
+- n8n filing workflow ID: `VAKq9Bra0RA0SdCO`
+- Shared memory file: `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`
+- Team routing config: `${CLAUDE_PLUGIN_ROOT}/knowledge/team-routing.md`
 
 ## Input
 
@@ -25,13 +28,19 @@ If `$ARGUMENTS` is empty, ask the user what to triage.
 
 ## Step 1: Load shared knowledge from SharePoint
 
-Read these files from the team's shared SharePoint knowledge folder (path stored in `${CLAUDE_PLUGIN_DATA}/sharepoint-config.json`, written by `/setup-copilot`):
+Read the shared memory file from SharePoint via `mcp__microsoft-365__sharepoint_read_file`:
 
-- `_knowledge/patterns.md` -- learned rules from lawyer feedback
-- `_knowledge/ticket-log.md` -- recent tickets (last 30 days) for dedup and reference
-- `_knowledge/feedback-log.md` -- correction history
+```
+myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md
+```
 
-Use `mcp__microsoft-365__sharepoint_read_file` for each. If any file is missing, fall back to the seed files in `${CLAUDE_PLUGIN_ROOT}/knowledge/` and tell the user "shared knowledge not yet bootstrapped -- run `/setup-copilot`".
+Plus the bundled seed knowledge in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
+
+- `patterns.md` -- learned rules from lawyer feedback
+- `feedback-log.md` -- correction history (seed)
+- `team-routing.md` -- assignment rules (read by the auto-assign skill in Step 7)
+
+If the SharePoint memory read fails, fall back to the seeds and surface a one-line warning.
 
 ---
 
@@ -51,88 +60,138 @@ JQL search for open near-duplicates:
 project in (LEGAL, AIRD) AND statusCategory != Done AND summary ~ "{key terms}"
 ```
 
-Also scan `_knowledge/ticket-log.md` for closed tickets with >90% semantic similarity.
-
-**Decision tree:**
+Scan recent `## Case:` entries inside `legal_copilot_memory.md` for >90% similarity too.
 
 | Finding | Action |
 |---|---|
-| Duplicate of an open ticket | Link as "is duplicated by", copy content into the original as a comment, transition the new ticket to Done with comment "Merged into {key}". Stop. |
-| >90% match to a closed ticket | Note the reference for Step 5 (adapt the previous response). Continue. |
-| Conflict (same matter, contradictory asks) | Link both as "relates to", flag on both with conflict comment, escalate. Stop. |
-| New request | Continue to Step 4. |
+| Duplicate of an open ticket | Link as "is duplicated by", merge content, transition new ticket to Done. Stop. |
+| >90% match to a closed ticket | Note for Step 4 (adapt the previous response). Continue. |
+| Conflict (same matter, contradictory asks) | Link both as "relates to", flag, escalate. Stop. |
+| New request | Continue. |
 
 ---
 
 ## Step 4: Classify using the matching legal-triage skill
 
-Pick exactly one of the 10 published legal-triage skills based on the matter:
+Pick exactly one of the 10 published legal-triage skills based on the matter (mapping table unchanged from prior version -- see `commands/triage-board.md` Phase 3 for the full table).
 
-| Matter | Skill |
-|---|---|
-| NDA / confidentiality / CDA | `legal-triage-nda` |
-| Third-party commercial contract | `legal-triage-contract-review` |
-| Regulatory question / regulator request | `legal-triage-regulatory-question` |
-| Entity restructuring, director, share | `legal-triage-corporate-change` |
-| Multi-workstream legal involvement | `legal-triage-project` |
-| KYC / corporate documentation about myPOS | `legal-triage-kyc` |
-| Updates to myPOS T&Cs | `legal-triage-gtcs` |
-| External-facing materials review | `legal-triage-materials-review` |
-| Dispute / claim / litigation | `legal-triage-claims` |
-| Regulatory inspection support | `legal-triage-inspection-support` |
-
-If none of the 10 fit, post a clarification comment on the ticket asking what legal support is needed. Do NOT move to Done. Stop.
-
-The chosen skill produces structured output (matter type, priority, SLA, jurisdiction, risk flags, missing-info questions, recommended action, and a draft response in myPOS legal house style).
+The chosen skill produces structured output: matter type, priority, SLA, jurisdiction, risk flags, missing-info questions, recommended action, draft response.
 
 **Risk gates (hard rules, never override):**
-- Any risk flag (regulator / inspection / claim / tight deadline) → `human_review_required = true`
-- Skill type is `claims` or `inspection_support` → `human_review_required = true`
-- Confidence < 0.7 OR ambiguous classification → `human_review_required = true`
+- Any risk flag (regulator / inspection / claim / tight deadline) -> `human_review_required = true`
+- Skill type is `claims` or `inspection_support` -> `human_review_required = true`
+- Confidence < 0.7 OR ambiguous classification -> `human_review_required = true`
 
 ---
 
-## Step 5: Devil's advocate review
+## Step 5: Devil's advocate review (review pass 1 of 2)
 
-Pass the draft from Step 4 to the `triage-reviewer` subagent (`agents/triage-reviewer.md`). The subagent runs the `devils-advocate-review` skill over the draft and returns:
+Pass the draft from Step 4 to the `triage-reviewer` subagent. The subagent runs the `devils-advocate-review` skill and returns `verdict`, `summary`, `findings`, optional `revised_draft`.
 
-- Issues found (each with severity: blocker / concern / nit)
-- Suggested edits
-- An overall verdict: `approve`, `revise`, or `escalate`
+If verdict = `revise`: apply the suggested edits, re-run review. Cap at 2 revision passes; if still `revise`, set `human_review_required = true` and pass the latest draft into Step 6.
 
-If verdict = `revise`: apply the suggested edits to the draft, then re-run review. Cap at 2 revision passes; if still `revise` after 2 passes, set `human_review_required = true` and surface the remaining issues to the lawyer.
-
-If verdict = `escalate`: set `human_review_required = true` and include the escalation reasons in the Jira comment.
+If verdict = `escalate`: set `human_review_required = true`. Continue to Step 6 anyway -- the business reviewer can still produce a reconciled draft and a clear summary.
 
 ---
 
-## Step 6: File attachments to SharePoint
+## Step 6: Business reviewer (review pass 2 of 2)
 
-Invoke the `sharepoint-filer` skill with:
+Pass the latest draft AND the Devil's advocate output AND the triage metadata to the `business-reviewer` subagent (`agents/business-reviewer.md`).
 
-- `ticket_key` (e.g., `LEGAL-4321`)
-- `ticket_summary` (used for the subfolder name)
-- `matter_type` (from Step 4 -- determines which top-level folder)
-- `attachments` (list of attachment URLs from the Jira ticket)
-- `draft_text` (from Step 5 -- saved as a `.docx`)
-- `review_text` (from Step 5 -- saved as `..._review.md`)
+Also include `context`:
 
-The skill returns the SharePoint folder URL, which gets cited in the Jira comment.
+```json
+{
+  "counterparty_name": "{from triage metadata or ticket}",
+  "is_strategic_partner": true | false | unknown,
+  "deal_size_estimate": "small" | "medium" | "large" | "unknown",
+  "open_relationship_tickets": "{count from JQL: counterparty same, statusCategory != Done}"
+}
+```
+
+If you do not know whether the counterparty is strategic, pass `unknown` -- the agent will surface a `context_gap`.
+
+The agent returns: `verdict`, `business_override`, `summary`, `reconciliations`, `additional_findings`, `final_draft`, `context_gaps`.
+
+**Verdict reconciliation (Devil's advocate + business):**
+
+- Both `approve` -> final verdict `approve`.
+- Devil's advocate `approve`, business `revise` -> apply the business `final_draft`. Final verdict `approve` (we are within review budget).
+- Devil's advocate `revise/escalate`, business `approve` (with `business_override: true`) -> only valid if NO risk flag set. Final verdict `approve`. Surface the override prominently in the Jira comment.
+- Either subagent escalates AND risk flag set -> `escalate`. `human_review_required = true`.
+- Otherwise default to the more conservative verdict.
+
+The `final_draft` from the business reviewer is what gets filed and used for the Outlook draft.
 
 ---
 
-## Step 7: Create the Outlook draft
+## Step 7: Auto-assign and set Jira fields
 
-`mcp__microsoft-365__outlook_email_create_draft` in the `AI Drafts` folder of the user's mailbox:
+Two parallel skill invocations (no comments, just field edits):
 
-- To: original sender (or reporter email if from Jira)
-- Subject: `Re: {original subject}`
-- Body: the reviewed draft (HTML), with `[DRAFT - FOR LAWYER REVIEW BEFORE SENDING]` banner at top
-- Custom property: `{"x-mypos-legal-ticket": "<ticket_key>"}` so `/reply-and-close` can find this draft later
+### 7a. Auto-assign
+
+Invoke `jira-auto-assign` with:
+
+```json
+{
+  "ticket_key": "{key}",
+  "matter_type": "{from Step 4}",
+  "confidence": {from Step 4},
+  "human_review_required": {bool},
+  "risk_flags": [...],
+  "priority": "{Jira priority}",
+  "sla_days": {N}
+}
+```
+
+The skill returns the assignee chosen and the rule applied. Reassignment of an already-assigned ticket is NOT done by /triage -- only `/triage-board` with last-replier logic does that.
+
+### 7b. Set fields and flag
+
+Invoke `jira-fields-and-flags` with:
+
+```json
+{
+  "ticket_key": "{key}",
+  "priority": "{priority}",
+  "sla_days": {N},
+  "matter_type": "{...}",
+  "risk_flags": [...],
+  "human_review_required": {bool},
+  "today_iso": "{YYYY-MM-DD}"
+}
+```
+
+The skill sets `priority`, `duedate`, `labels`, and the `Flagged` field directly on the ticket. No comment.
+
+If either skill returns `applied: false` / `assigned: false`, capture the reason and surface it in the Step 10 comment under a `Field-set warnings:` line, then continue.
 
 ---
 
-## Step 8: Post the triage summary as a Jira comment
+## Step 8: File outputs to SharePoint via n8n
+
+Invoke `sharepoint-filer` with the business reviewer's `final_draft`, all Jira attachments, and findings from both reviewers (Devil's advocate + business). The filer embeds them as Word comments inside the `.docx`:
+
+- One anchored comment per Devil's advocate finding.
+- One anchored comment per business reviewer reconciliation, prefixed `[Business review]`.
+- One anchored comment per business reviewer additional finding.
+- A verdict summary comment on the document title that includes BOTH the Devil's advocate verdict and the business reviewer verdict.
+
+If `success: false`, halt and surface the workflow error. DO NOT post the AI Triage Jira comment in Step 10.
+
+---
+
+## Step 9: Create the Outlook draft
+
+`mcp__microsoft-365__outlook_email_create_draft` in the `AI Drafts` folder:
+
+- Body: the business reviewer's `final_draft` (with `[DRAFT - FOR LAWYER REVIEW BEFORE SENDING]` banner)
+- Custom property: `{"x-mypos-legal-ticket": "<ticket_key>"}`
+
+---
+
+## Step 10: Post the AI Triage Jira comment
 
 `mcp__atlassian__addCommentToJiraIssue` with `contentFormat: markdown`:
 
@@ -140,59 +199,55 @@ The skill returns the SharePoint folder URL, which gets cited in the Jira commen
 ---
 ## AI Triage
 
-**Matter type:** {type}
-**Priority:** {priority} | **SLA due:** {sla_days} calendar days
-**AI confidence:** {confidence}%
-**Jurisdictions:** {jurisdictions or "unspecified"}
+**Matter type:** {type} | **AI confidence:** {confidence}%
 **Skill used:** {legal-triage-* skill name}
+**Jurisdictions:** {jurisdictions or "unspecified"}
+
+**Auto-assigned to:** {assignee_name} ({rule_applied})
+**Fields set:** priority={priority}, due={due_date}, flagged={yes|no}, labels=[{labels_added}]
 
 {if risk flags: "**Risk flags:** {flags}"}
-{if human_review_required: "**⚠ NEEDS HUMAN REVIEW BEFORE SEND**"}
+{if human_review_required: "**NEEDS HUMAN REVIEW BEFORE SEND**"}
 {if similar past ticket: "**Similar past ticket:** {key} -- response adapted from previous matter"}
 {if missing info: "**Missing information:**\n{questions}"}
 
 **Recommended action:** {action}
 
-**Devil's advocate review:** {verdict} -- {1-line summary of findings}
+**Devil's advocate verdict:** {da_verdict} -- {da_summary}
+**Business reviewer verdict:** {br_verdict}{if business_override: ' (OVERRIDE applied)'} -- {br_summary}
 
-**Filed to SharePoint:** [{matter_type}/{ticket_summary_subfolder}]({sharepoint_url})
+**Filed to SharePoint:** [{matter_type}/{ticket_key}/]({sharepoint_folder_url})
+{list of {filename -> sharepoint_url} for each filed document}
+**Memory file updated:** [legal_copilot_memory.md]({memory_file_url})
 
 ---
 ## Draft Response (for lawyer to review, edit, and send)
 
-{reviewed draft text}
+{business reviewer final draft}
 
 ---
 *Outlook draft saved to AI Drafts folder. Run `/reply-and-close {ticket_key}` after review.*
 ---
 ```
 
----
-
-## Step 9: Update shared knowledge
-
-Append a row to `_knowledge/ticket-log.md` on SharePoint:
-
-```
-| {YYYY-MM-DD} | {ticket_key} | {summary} | {type} | {priority} | Triaged + draft ready | Pending lawyer review |
-```
-
-Use `mcp__microsoft-365__sharepoint_upload_file` (or update-in-place) to write back. Last-writer-wins; the file is small enough that conflicts are rare.
+Note: priority, due date, assignee, and flag are NOT repeated here as bullet items above the draft -- those live on the ticket fields now. The "Fields set" line is a one-line confirmation for the audit trail only.
 
 ---
 
-## Step 10: Summarise to the user
+## Step 11: Summarise to the user
 
 ```
 Triage complete for {ticket_key}:
-  Matter: {type} | Priority: {priority} | SLA: {sla_days}d
+  Matter: {type} | Priority: {priority} | SLA: {sla_days}d | Due: {due_date}
+  Assigned to: {assignee_name} ({rule_applied})
   Skill: {legal-triage-skill-name}
   Risk flags: {flags or "none"}
-  Devil's advocate verdict: {approve | revise | escalate}
-  Filed to: {sharepoint folder URL}
+  Devil's advocate: {da_verdict} | Business reviewer: {br_verdict}{if override: ' (override)'}
+  Filed: {sharepoint_folder_url}
+  Memory: {memory_file_url}
   Outlook draft: AI Drafts > "Re: {subject}"
-  Jira comment posted.
-  {if human_review_required: "⚠ Lawyer review required before /reply-and-close"}
+  Jira comment posted; fields set: priority, due, labels, flag.
+  {if human_review_required: "Lawyer review required before /reply-and-close"}
 ```
 
 ---
@@ -200,8 +255,13 @@ Triage complete for {ticket_key}:
 ## Hard rules
 
 - NEVER send emails -- only create drafts.
-- NEVER move the ticket to Done. That's `/reply-and-close`'s job, after lawyer review.
-- NEVER fabricate facts -- if information is missing, ask via the Jira comment.
-- NEVER mention individuals by name -- use roles ("Compliance team", not "Maria").
+- NEVER move the ticket to Done. That's `/reply-and-close`'s job.
+- NEVER post priority, due date, deadline, flag, or assignee as a Jira comment. Use the fields.
+- NEVER skip the business reviewer pass. Three opinions, every time.
+- NEVER let `business_override: true` ride if any risk flag is set.
+- NEVER fabricate `context.is_strategic_partner` -- pass `unknown` if you do not know.
 - NEVER override risk gates.
-- Be conservative -- when uncertain, set `human_review_required = true`.
+- NEVER reassign an already-assigned ticket from /triage. That is `/triage-board`'s job.
+- NEVER post the AI Triage comment if the n8n filing returned `success: false`.
+- NEVER bypass the n8n workflow with a direct M365 SharePoint write.
+- NEVER fall back to local-Desktop saving when n8n fails.
