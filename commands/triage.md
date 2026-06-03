@@ -12,7 +12,7 @@ Triage a single legal request end-to-end. The ticket does **not** move to Done -
 - Atlassian Cloud ID: `fb47470f-f5c2-44bc-8182-f2a22f059adb`
 - Projects watched: `LEGAL`, `AIRD`
 - n8n filing workflow ID: `VAKq9Bra0RA0SdCO`
-- Shared memory file: `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`
+- Shared memory file: `myPOS Legal 1/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`
 - Team routing config: `${CLAUDE_PLUGIN_ROOT}/knowledge/team-routing.md`
 
 ## Input
@@ -31,7 +31,7 @@ If `$ARGUMENTS` is empty, ask the user what to triage.
 Read the shared memory file from SharePoint via `mcp__microsoft-365__sharepoint_read_file`:
 
 ```
-myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md
+myPOS Legal 1/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md
 ```
 
 Plus the bundled seed knowledge in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
@@ -178,7 +178,9 @@ Invoke `sharepoint-filer` with the business reviewer's `final_draft`, all Jira a
 - One anchored comment per business reviewer additional finding.
 - A verdict summary comment on the document title that includes BOTH the Devil's advocate verdict and the business reviewer verdict.
 
-If `success: false`, halt and surface the workflow error. DO NOT post the AI Triage Jira comment in Step 10.
+The filer base64-encodes the `.docx` (and every Jira attachment) and inlines them in the workflow's `documents` field. **Do NOT pass a `file_manifest`, `payload_path`, or `documents_from_url` shape -- the workflow only accepts the literal `documents: [{filename, content_base64, mime_type}]` array.** Do NOT substitute a `.txt` "receipt" for the real document if base64-inlining feels awkward; the workflow will accept it and "succeed", but the case folder ends up with a receipt and no draft -- this is the failure mode we are trying to eliminate.
+
+**On `success: false` -- HALT.** Surface the workflow error verbatim to the user. DO NOT proceed to Step 9 (Outlook draft) or Step 10 (Jira AI Triage comment). A failed filing with a clear error is better than a "successful" filing of a stub that points the lawyer at an empty SharePoint folder. The lawyer can re-run `/file-to-sharepoint LEGAL-XXXX` once the underlying issue is resolved.
 
 ---
 
@@ -263,5 +265,6 @@ Triage complete for {ticket_key}:
 - NEVER override risk gates.
 - NEVER reassign an already-assigned ticket from /triage. That is `/triage-board`'s job.
 - NEVER post the AI Triage comment if the n8n filing returned `success: false`.
+- NEVER substitute a `.txt` "receipt" for the real `.docx` when calling the filer. If base64-inlining is impossible, the filer must return `success: false` with `error: "document_too_large_to_inline"` and `/triage` must halt.
 - NEVER bypass the n8n workflow with a direct M365 SharePoint write.
 - NEVER fall back to local-Desktop saving when n8n fails.

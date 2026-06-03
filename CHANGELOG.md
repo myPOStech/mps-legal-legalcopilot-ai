@@ -2,6 +2,27 @@
 
 All notable changes to the myPOS Legal Copilot plugin.
 
+## [0.4.3] - 2026-06-03
+
+Filing reliability fix -- stop the "receipt-only" silent failure pattern, correct the live SharePoint base path, and document the strict n8n payload contract.
+
+### Fixed
+- **`sharepoint-filer` SKILL.md** -- expanded Hard rules. Three new prohibitions:
+  - NEVER substitute a `.txt` "receipt" for the actual document. If the real `.docx` cannot be inlined as `content_base64` inside one MCP tool call, the skill MUST return `success: false` with `error: "document_too_large_to_inline"` -- not silently degrade to a receipt stub. The lawyer never re-runs `/file-to-sharepoint`, so a receipt-only filing leaves the case folder permanently empty.
+  - NEVER invent alternative payload shapes (`file_manifest`, `payload_path`, `documents_from_url`). The workflow accepts exactly one shape: `documents: [{filename, content_base64, mime_type}]`. Anything else throws `Document item missing filename or content_base64` (see execution 6727 on 2026-05-27 -- LEGAL-4912 hard-failed because the caller sent `file_manifest` + `payload_path` instead).
+  - NEVER include the ticket key in `case_folder`. The workflow concatenates `case_id` itself. Sending `Claims/LEGAL-4912` produces `.../Claims/LEGAL-4912/LEGAL-4912/` (see execution 6727).
+- **`sharepoint-filer` SKILL.md** -- documented the correct live SharePoint base path: `myPOS Legal 1/...` (note trailing ` 1`), not `myPOS Legal/...`. The `Prepare State` node in workflow `VAKq9Bra0RA0SdCO` hard-codes the former; previous SKILL docs were stale.
+- **`sharepoint-filer` SKILL.md** -- added a "Known-good caller pattern" Python snippet so future agents reuse the proven shape.
+- **`/triage` Step 8** -- explicit and prominent: on `success: false` HALT, surface the workflow error, and do NOT proceed to Step 9 (Outlook draft) or Step 10 (AI Triage Jira comment). A failed filing with a clear error is better than a "successful" filing of a receipt stub that points the lawyer at an empty SharePoint folder.
+
+### Diagnosed (not fixed in this release -- planned for 0.5.0)
+- Workflow `VAKq9Bra0RA0SdCO` has no server-side document-fetch path. The caller must inline ~50 KB of base64 per docx into one MCP tool call, which agents intermittently punt on. 0.5.0 will add a `documents_from_jira: [{filename, jira_attachment_url, mime_type}]` field to the workflow plus an Atlassian Bearer Token credential, so n8n fetches Jira attachments server-side and the caller only ever inlines the (sub-100 KB) AI-generated draft.
+
+### Plugin version
+- Bumped to **0.4.3**.
+
+---
+
 ## [0.4.2] - 2026-06-02
 
 Repo moved to the myPOStech GitHub org.
