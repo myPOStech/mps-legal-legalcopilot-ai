@@ -1,7 +1,7 @@
 ---
 name: jira-auto-assign
 description: Pick the right Legal team member for a Jira ticket and set the Jira assignee directly via mcp__atlassian__editJiraIssue. Use after a legal-triage-* skill has produced a matter type and severity, and before /triage posts the AI Triage comment. Reads team and expertise rules from knowledge/team-routing.md so the team can re-route by editing one file.
-tools: Read, Skill, mcp__atlassian__editJiraIssue, mcp__atlassian__searchJiraIssuesUsingJql, mcp__atlassian__lookupJiraAccountId, mcp__microsoft-365__sharepoint_read_file, mcp__n8n__execute_workflow
+tools: Read, Skill, mcp__atlassian__editJiraIssue, mcp__atlassian__searchJiraIssuesUsingJql, mcp__atlassian__lookupJiraAccountId, mcp__microsoft-365__sharepoint_search, mcp__microsoft-365__read_resource, mcp__n8n__execute_workflow
 ---
 
 # Jira auto-assign
@@ -24,9 +24,13 @@ Caller passes a structured dict:
 }
 ```
 
+Optional (used only by `/triage-board` Phase 2): `force_reassign: true`, `override_account_id: "{accountId}"`.
+
 ## Step 1: Load routing rules
 
-Read `${CLAUDE_PLUGIN_ROOT}/knowledge/team-routing.md`. Parse:
+Read `${CLAUDE_PLUGIN_ROOT}/knowledge/team-routing.md`. If that path is unreadable (app-internal path; common in scheduled runs), fetch `team-routing.md` from the SharePoint `_knowledge` folder instead: `sharepoint_search` for `team-routing` -> take the hit under `/myPOS Legal 1/` -> `read_resource` on its `uri`.
+
+Parse:
 
 - The **Team roster** table -- skip any row with `Active = no`.
 - The **Expertise map** table -- one primary plus secondaries per matter type.
@@ -34,7 +38,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/knowledge/team-routing.md`. Parse:
 - `senior_reviewer` -- the YAML block under "Senior reviewer".
 - `soft_capacity_threshold` -- integer.
 
-If the file is missing or any required section is unparseable, abort and return:
+If neither source is readable or any required section is unparseable, abort and return:
 
 ```json
 {"assigned": false, "reason": "team-routing.md missing or malformed"}
@@ -58,8 +62,7 @@ Otherwise `severity = "normal"`.
 
 ### If severity = high
 
-1. Read the SharePoint memory file via `mcp__microsoft-365__sharepoint_read_file` at:
-   `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`
+1. Read the SharePoint memory file: `sharepoint_search` for `legal_copilot_memory` -> take the hit whose `webUrl` contains `/myPOS Legal 1/` (NEVER the stale `/myPOS Legal/` copy) -> `read_resource` on its `uri`.
 2. Search for the line `<!-- legal-copilot:high-severity-counter:N -->`. Extract `N` (integer). If missing, `N = 0`.
 3. If `N % 2 == 0`: candidate is `high_severity_pool[0]`. Else `high_severity_pool[1]`.
 4. After the assignment succeeds (Step 5), increment `N` via the n8n filing workflow (Step 6).
@@ -103,6 +106,8 @@ If the call returns an error (account does not exist, permission denied), retry 
 {"assigned": false, "reason": "edit-issue failed: {error}"}
 ```
 
+**Transition interaction:** if the caller transitions the ticket in the same flow, the transition MUST happen before this assignment, and the caller MUST re-read the assignee afterwards -- the LEGAL project's "Start Progress" post-function reassigns the ticket to the acting account (observed overwriting correct owners 6 times in June 2026). If the verify shows the wrong assignee, call editJiraIssue once more.
+
 ## Step 6: Update the high-severity counter (high severity only)
 
 Call the n8n filing workflow `VAKq9Bra0RA0SdCO` with a memory-only update payload:
@@ -126,7 +131,7 @@ The workflow side handles the actual `N -> N+1` rewrite. If the workflow returns
   "assignee_name": "Jay Manjdadria",
   "assignee_account_id": "62855af6222d36006fb76bdd",
   "severity": "normal" | "high",
-  "rule_applied": "matter_type_primary" | "matter_type_secondary[i]" | "high_severity_oscillation" | "senior_reviewer_fallback" | "capacity_override",
+  "rule_applied": "matter_type_primary" | "matter_type_secondary[i]" | "high_severity_oscillation" | "senior_reviewer_fallback" | "capacity_override" | "last_replier",
   "open_load_at_assignment": 3
 }
 ```
@@ -142,3 +147,5 @@ The calling command embeds this verbatim into the AI Triage Jira comment under a
 - NEVER guess an account_id. If lookup fails, fall back to the senior_reviewer.
 - NEVER reassign a ticket that already has an assignee unless the caller passes `force_reassign: true` (used only by `/triage-board` last-replier logic). Default is single-shot.
 - NEVER edit `team-routing.md` from this skill. The team owns that file.
+- NEVER read the stale memory file under `myPOS Legal/` (no trailing " 1").
+- ALWAYS assign AFTER any status transition in the same flow, and verify the assignee stuck.
