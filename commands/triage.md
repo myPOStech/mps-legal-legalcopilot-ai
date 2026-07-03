@@ -5,7 +5,7 @@ argument-hint: <TICKET-KEY | jira URL | pasted email>
 
 # /triage
 
-Triage a single legal request end-to-end. The ticket does **not** move to Done -- the lawyer reviews the draft in Outlook, then runs `/reply-and-close` to send and close.
+Triage a single legal request end-to-end. The ticket does **not** move to Done -- the lawyer reviews the draft (in the AI Triage Jira comment and the SharePoint .docx), then runs `/reply-and-close` to file the sent reply and close.
 
 ## Constants
 
@@ -14,6 +14,8 @@ Triage a single legal request end-to-end. The ticket does **not** move to Done -
 - n8n filing workflow ID: `VAKq9Bra0RA0SdCO`
 - Shared memory file: `myPOS Legal 1/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`
 - Team routing config: `${CLAUDE_PLUGIN_ROOT}/knowledge/team-routing.md`
+
+> **Tool naming:** Microsoft 365 and Atlassian tools may be mounted under a session-specific server prefix. Match tools by suffix (`sharepoint_search`, `read_resource`, `outlook_email_search`, `getJiraIssue`, ...). If a tool named in this file does not exist under any prefix, treat that step per its own fallback instructions -- do not invent a tool name.
 
 ## Input
 
@@ -28,11 +30,11 @@ If `$ARGUMENTS` is empty, ask the user what to triage.
 
 ## Step 1: Load shared knowledge from SharePoint
 
-Read the shared memory file from SharePoint via `mcp__microsoft-365__sharepoint_read_file`:
+The Microsoft 365 connector has no direct path-read tool. Read the shared memory file with this exact pattern:
 
-```
-myPOS Legal 1/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md
-```
+1. `sharepoint_search` with query `legal_copilot_memory`.
+2. Take the result whose `webUrl` contains `/myPOS Legal 1/`. **IGNORE any result under `/myPOS Legal/` (no trailing " 1") -- that copy is stale (last write 2026-05-19) and must never be read or cited.**
+3. `read_resource` with the returned `uri`.
 
 Plus the bundled seed knowledge in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
 
@@ -40,7 +42,10 @@ Plus the bundled seed knowledge in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
 - `feedback-log.md` -- correction history (seed)
 - `team-routing.md` -- assignment rules (read by the auto-assign skill in Step 7)
 
-If the SharePoint memory read fails, fall back to the seeds and surface a one-line warning.
+**Fallbacks (in order):**
+- SharePoint memory read fails -> continue with the seeds and surface a one-line warning.
+- `${CLAUDE_PLUGIN_ROOT}/knowledge/` unreadable (app-internal path; common in scheduled runs) -> fetch `team-routing.md`, `patterns.md` and `sharepoint-map.md` from the SharePoint `_knowledge` folder with the same search + read_resource pattern.
+- Missing there too -> continue with conservative defaults, flag it in the final summary, and suggest `/setup-copilot` to seed them.
 
 ---
 
@@ -49,6 +54,8 @@ If the SharePoint memory read fails, fall back to the seeds and surface a one-li
 **Jira key provided:** `mcp__atlassian__getJiraIssue` with `responseContentFormat: markdown`. Extract summary, description, reporter, attachments list, existing comments.
 
 **Email pasted:** use the subject, body, and sender directly.
+
+**Attachment gate:** if the ticket's substance lives in an attachment (scanned letter, PDF) and its text cannot be extracted from Jira in this session, STOP and tell the lawyer exactly which file to attach in chat. Do not classify from the summary alone.
 
 ---
 
@@ -68,6 +75,8 @@ Scan recent `## Case:` entries inside `legal_copilot_memory.md` for >90% similar
 | >90% match to a closed ticket | Note for Step 4 (adapt the previous response). Continue. |
 | Conflict (same matter, contradictory asks) | Link both as "relates to", flag, escalate. Stop. |
 | New request | Continue. |
+
+**Re-triage cap:** if the ticket already carries an `## AI Triage` comment and there is NO human comment after it, do NOT run a fresh triage. If the SLA is breached, post one single escalation line mentioning the assignee; otherwise report "already triaged, awaiting lawyer" and stop.
 
 ---
 
@@ -121,7 +130,7 @@ The agent returns: `verdict`, `business_override`, `summary`, `reconciliations`,
 - Either subagent escalates AND risk flag set -> `escalate`. `human_review_required = true`.
 - Otherwise default to the more conservative verdict.
 
-The `final_draft` from the business reviewer is what gets filed and used for the Outlook draft.
+The `final_draft` from the business reviewer is what gets filed and posted.
 
 ---
 
@@ -180,16 +189,21 @@ Invoke `sharepoint-filer` with the business reviewer's `final_draft`, all Jira a
 
 The filer base64-encodes the `.docx` (and every Jira attachment) and inlines them in the workflow's `documents` field. **Do NOT pass a `file_manifest`, `payload_path`, or `documents_from_url` shape -- the workflow only accepts the literal `documents: [{filename, content_base64, mime_type}]` array.** Do NOT substitute a `.txt` "receipt" for the real document if base64-inlining feels awkward; the workflow will accept it and "succeed", but the case folder ends up with a receipt and no draft -- this is the failure mode we are trying to eliminate.
 
-**On `success: false` -- HALT.** Surface the workflow error verbatim to the user. DO NOT proceed to Step 9 (Outlook draft) or Step 10 (Jira AI Triage comment). A failed filing with a clear error is better than a "successful" filing of a stub that points the lawyer at an empty SharePoint folder. The lawyer can re-run `/file-to-sharepoint LEGAL-XXXX` once the underlying issue is resolved.
+**On `success: false` -- HALT.** Surface the workflow error verbatim to the user. DO NOT proceed to Step 9 (draft delivery) or Step 10 (Jira AI Triage comment). A failed filing with a clear error is better than a "successful" filing of a stub that points the lawyer at an empty SharePoint folder. The lawyer can re-run `/file-to-sharepoint LEGAL-XXXX` once the underlying issue is resolved.
 
 ---
 
-## Step 9: Create the Outlook draft
+## Step 9: Deliver the draft
 
-`mcp__microsoft-365__outlook_email_create_draft` in the `AI Drafts` folder:
+There is NO draft-creation tool in the Microsoft 365 connector (it is read-only for mail: search + read_resource only). Do not attempt `outlook_email_create_draft` -- it has never existed in this environment. Draft delivery works like this:
 
-- Body: the business reviewer's `final_draft` (with `[DRAFT - FOR LAWYER REVIEW BEFORE SENDING]` banner)
-- Custom property: `{"x-mypos-legal-ticket": "<ticket_key>"}`
+1. The full draft goes into the "Draft Response" section of the AI Triage Jira comment (Step 10). That comment is the lawyer's review surface.
+2. The annotated `.docx` filed to SharePoint in Step 8 is the editable copy.
+3. If the n8n workflow `legal-copilot-draft` exists (check once per session with the n8n `search_workflows` tool), call it via `execute_workflow` with:
+   ```json
+   {"ticket_key": "{key}", "subject": "Re: {ticket summary}", "body_html": "{final_draft as HTML with a DRAFT banner}"}
+   ```
+   and include the returned `webLink` in Steps 10 and 11. If it does not exist, the draft simply lives in the Jira comment -- no warning needed, this is the designed behaviour.
 
 ---
 
@@ -228,7 +242,7 @@ The filer base64-encodes the `.docx` (and every Jira attachment) and inlines the
 {business reviewer final draft}
 
 ---
-*Outlook draft saved to AI Drafts folder. Run `/reply-and-close {ticket_key}` after review.*
+*Review the Draft Response above (or the SharePoint .docx){if draft webLink: ", or open the [Outlook draft]({webLink})"}. Send your reply from Outlook, then run `/reply-and-close {ticket_key}`.*
 ---
 ```
 
@@ -247,7 +261,7 @@ Triage complete for {ticket_key}:
   Devil's advocate: {da_verdict} | Business reviewer: {br_verdict}{if override: ' (override)'}
   Filed: {sharepoint_folder_url}
   Memory: {memory_file_url}
-  Outlook draft: AI Drafts > "Re: {subject}"
+  Outlook draft: {webLink | "n/a -- draft is in the Jira comment"}
   Jira comment posted; fields set: priority, due, labels, flag.
   {if human_review_required: "Lawyer review required before /reply-and-close"}
 ```
@@ -256,7 +270,8 @@ Triage complete for {ticket_key}:
 
 ## Hard rules
 
-- NEVER send emails -- only create drafts.
+- NEVER send emails. No send tool exists in this environment; the lawyer sends from Outlook. The Copilot's draft lives in the Jira comment, the SharePoint .docx, and (when the n8n draft workflow is deployed) an Outlook draft.
+- NEVER attempt `outlook_email_create_draft` or any other tool not present in the session. If a capability is missing, follow the step's documented fallback.
 - NEVER move the ticket to Done. That's `/reply-and-close`'s job.
 - NEVER post priority, due date, deadline, flag, or assignee as a Jira comment. Use the fields.
 - NEVER skip the business reviewer pass. Three opinions, every time.
@@ -264,7 +279,9 @@ Triage complete for {ticket_key}:
 - NEVER fabricate `context.is_strategic_partner` -- pass `unknown` if you do not know.
 - NEVER override risk gates.
 - NEVER reassign an already-assigned ticket from /triage. That is `/triage-board`'s job.
+- NEVER re-triage a ticket whose last AI Triage comment has no human reply after it (see Step 3 re-triage cap).
 - NEVER post the AI Triage comment if the n8n filing returned `success: false`.
 - NEVER substitute a `.txt` "receipt" for the real `.docx` when calling the filer. If base64-inlining is impossible, the filer must return `success: false` with `error: "document_too_large_to_inline"` and `/triage` must halt.
 - NEVER bypass the n8n workflow with a direct M365 SharePoint write.
+- NEVER read or cite the stale memory file under `myPOS Legal/` (no trailing " 1").
 - NEVER fall back to local-Desktop saving when n8n fails.

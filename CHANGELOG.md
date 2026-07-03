@@ -2,6 +2,34 @@
 
 All notable changes to the myPOS Legal Copilot plugin.
 
+## [0.4.4] - 2026-07-03
+
+Reality-alignment release, driven by the first weekly usage review (30 days of session transcripts, n8n execution logs, and a live tool inventory). Removes every reference to Microsoft 365 tools that do not exist, hardens scheduled sweeps against mid-run death, and reworks `/reply-and-close` to a lawyer-sends-first flow.
+
+### Fixed
+- **Nonexistent M365 tools removed everywhere.** The Microsoft 365 connector is read-only (search + read_resource). `outlook_email_create_draft`, `outlook_email_send`, `sharepoint_read_file`, `sharepoint_list_items`, `sharepoint_upload_file` and `sharepoint_create_folder` have never existed in it; 0 Outlook drafts were created in 15 sessions. All commands and skills now use the real read pattern (`sharepoint_search` -> `read_resource`) and deliver drafts via the AI Triage Jira comment + the SharePoint `.docx`. `/triage` Step 9 optionally calls the (not yet deployed) n8n `legal-copilot-draft` workflow and degrades silently when absent.
+- **`/reply-and-close` reworked to manual-send.** The old flow depended on finding an Outlook draft (never created) and a send tool (does not exist). New flow: the lawyer sends from Outlook; the command locates the sent email (`outlook_email_search` in Sent Items), diffs it against the AI draft from the Jira comment, files it via n8n as a rendered `.html` (raw `.eml` MIME is not retrievable), captures edit feedback to the memory file, and transitions the ticket. Risk-gate confirmation rules preserved.
+- **Stale `myPOS Legal/` path purged from `/triage-board`, `/triage-inbox`, `/reply-and-close`, `jira-auto-assign`.** These four still pointed at the pre-0.4.3 base path; a stale duplicate memory file at that path (last write 2026-05-19) confused three June sessions. All references now use `myPOS Legal 1/` and explicitly forbid reading the stale copy.
+- **`/triage-board` Phase 2 order: transition first, then assign, then verify.** The LEGAL project's "Start Progress" post-function reassigns tickets to the acting account; it overwrote correct owners 6 times in June (5 on 2026-06-26, 1 on 2026-07-02). The assignee is now set after the transition and re-verified.
+- **`sharepoint-filer`: curl fallback removed.** Sandbox egress blocks the webhook (403 on CONNECT, observed 2026-06-02); the n8n MCP `execute_workflow` tool is the only transport. New error code `n8n_mcp_unavailable`. Also: `success_but_empty` uploads now count as failures (that is how the 12/13-byte stubs slipped through), and `memory_instructions` is documented as a markdown string, never a JSON object (two raw JSON blobs were pasted into the memory file on 2026-05-27).
+
+### Added
+- **`/triage-board` Phase 0: context budget.** 4 of 12 June sweeps died mid-run with no report, consistent with context exhaustion from 30-50K-token `getJiraIssue` payloads. Hard rules: compact-field JQL for all scans, one full ticket at a time, per-ticket subagent isolation, max 3 new triages per sweep, and a per-phase checkpoint line to a local run log so an interrupted run leaves evidence of what was already written to Jira.
+- **Re-triage cap** in `/triage` Step 3 and `/triage-board` Phase 3: a ticket with an AI Triage comment and no human reply after it is never re-triaged (LEGAL-4990 was triaged 4 times in 21 days); SLA breach produces one escalation line instead.
+- **Knowledge-seed fallback** in all commands and `jira-auto-assign`: when `${CLAUDE_PLUGIN_ROOT}/knowledge/` is unreadable (app-internal path; killed the 2026-07-01 sweep), fetch `team-routing.md` / `patterns.md` / `sharepoint-map.md` from the SharePoint `_knowledge` folder; degrade to conservative defaults with a flag if missing there too.
+- **`/triage` Step 2 attachment gate:** if the ticket's substance is an unreadable attachment, stop and ask for it in chat instead of classifying from the summary (the 2026-06-03 MVR redraft stalled on exactly this).
+- **`/triage-inbox` idempotency without mail writes:** the connector cannot mark emails read or tag them. Tickets now embed `Source-Message-Id`, processed IDs are logged to the memory file and skipped on the next sweep. The unread-filter and category-tagging instructions are gone.
+
+### Not in this release (queued for 0.5.0, tracked as n8n proposals)
+- Workflow-side `documents_from_jira` + `text_documents` fields (server-side attachment fetch; removes the 40-60 KB inline-base64 ceiling that kept real drafts out of SharePoint all June).
+- New `legal-copilot-draft` n8n workflow (real Outlook drafts via Microsoft Graph under the service account; needs Mail.ReadWrite consent).
+- Archiving the inactive duplicate workflow `Legal Copilot copy - NS`.
+
+### Plugin version
+- Bumped to **0.4.4**.
+
+---
+
 ## [0.4.3] - 2026-06-03
 
 Filing reliability fix -- stop the "receipt-only" silent failure pattern, correct the live SharePoint base path, and document the strict n8n payload contract.

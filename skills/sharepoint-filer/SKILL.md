@@ -7,7 +7,7 @@ description: File triage outputs (drafts, attachments, sent emails, comment thre
 
 Push every triage output to SharePoint in one round trip by calling the team's n8n `Legal Copilot` workflow. The workflow creates the case subfolder, uploads each document, downloads-appends-uploads the shared memory file, and returns a JSON summary with the live SharePoint URL of every uploaded file.
 
-> **Why n8n:** the Microsoft 365 MCP cannot reliably write to SharePoint. The n8n workflow authenticates via a service-account OAuth credential and uses the SharePoint REST API directly, which is reliable. The workflow is the single source of truth for "where do legal triage outputs end up." When this skill calls the workflow, it does **not** need to know SharePoint paths, folder IDs, or auth -- the workflow owns all of that.
+> **Why n8n:** the Microsoft 365 MCP cannot write to SharePoint at all (read/search tools only). The n8n workflow authenticates via a service-account OAuth credential and uses the SharePoint REST API directly, which is reliable. The workflow is the single source of truth for "where do legal triage outputs end up." When this skill calls the workflow, it does **not** need to know SharePoint paths, folder IDs, or auth -- the workflow owns all of that.
 
 ## The n8n workflow
 
@@ -17,12 +17,12 @@ Push every triage output to SharePoint in one round trip by calling the team's n
 | Workflow ID | `VAKq9Bra0RA0SdCO` |
 | Production webhook | `https://myposai.app.n8n.cloud/webhook/legal-copilot-filing` |
 | Method | `POST` |
-| Available in MCP | yes -- callable via `mcp__n8n__execute_workflow` |
+| Available in MCP | yes -- callable via the n8n `execute_workflow` tool |
 | What it does | Creates `/sites/legal/Shared Documents/myPOS Legal 1/Claude skills memory/Copilot/{case_folder}/{case_id}/`, uploads each document, downloads the memory file, appends a markdown entry, re-uploads it, returns a JSON summary |
 | Memory file location | `myPOS Legal 1/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md` |
 | SharePoint root | `https://mypos0.sharepoint.com/sites/legal/Shared Documents/myPOS Legal 1/Claude skills memory/Copilot/` |
 
-> The base path is `myPOS Legal 1/` (note the trailing ` 1`), not `myPOS Legal/`. Earlier docs were stale. Confirmed against the live workflow's `Prepare State` node.
+> The base path is `myPOS Legal 1/` (note the trailing ` 1`), not `myPOS Legal/`. Earlier docs were stale. Confirmed against the live workflow's `Prepare State` node. A stale duplicate memory file exists under `myPOS Legal/` -- never read or cite it.
 
 ## Inputs
 
@@ -33,7 +33,7 @@ The caller (`/triage`, `/file-to-sharepoint`, `/reply-and-close`, `/triage-board
 | `ticket_key` | yes | Jira key (e.g., `LEGAL-4321`). Becomes `case_id` in the n8n payload. |
 | `ticket_summary` | yes | Ticket title. Used in filenames and as part of the memory entry. |
 | `matter_type` | yes | One of the 10 matter types (NDA, contract review, regulatory question, corporate change, project, KYC support, GTCs, materials review, claims, inspection support). Maps to the matter-type folder name. |
-| `files` | yes | List of `{name, source, content_or_url, role, mime_type}` where `role` ∈ `{draft, attachment, final_email, comments}` and `mime_type` is the IANA type (e.g., `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `application/pdf`, `message/rfc822`). |
+| `files` | yes | List of `{name, source, content_or_url, role, mime_type}` where `role` ∈ `{draft, attachment, final_email, comments}` and `mime_type` is the IANA type (e.g., `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `application/pdf`, `text/html`). |
 | `review_findings` | optional | Devil's advocate findings. Embedded as anchored Word comments inside the draft `.docx` BEFORE base64-encoding. List of `{severity, location, issue, suggested_edit}`. |
 | `counterparty` | optional | If known, used in filenames; otherwise derived from the ticket. |
 | `memory_notes` | optional | Free-text notes the caller wants appended to the shared memory file. The skill builds the final `memory_instructions` markdown block from these + the structured triage metadata. |
@@ -53,7 +53,7 @@ Returns:
 | `memory_file_url` | The SharePoint URL of the shared memory file. |
 | `memory_file_updated` | Boolean. True when the workflow successfully re-uploaded the memory file. |
 | `chat_summary` | A multi-line string ready to print to chat (and to embed in the Jira comment) summarising what was filed and where. |
-| `error` | When `success: false`, a short machine-readable error code (e.g., `document_too_large_to_inline`, `workflow_http_error`, `workflow_rejected_payload`). |
+| `error` | When `success: false`, a short machine-readable error code (e.g., `document_too_large_to_inline`, `workflow_http_error`, `workflow_rejected_payload`, `n8n_mcp_unavailable`). |
 
 ---
 
@@ -102,12 +102,12 @@ Filenames follow the team convention:
 |---|---|---|---|
 | draft | `v{N}` | `.docx` | `LEGAL-4321_AcmeCorp_2026-04-27_v1.docx` |
 | attachment | `attachment_{original-stem}` | original | `LEGAL-4321_AcmeCorp_2026-04-27_attachment_NDA-Acme.pdf` |
-| final_email | `final` | `.eml` | `LEGAL-4321_AcmeCorp_2026-04-27_final.eml` |
+| final_email | `final` | `.html` (rendered headers + body; raw `.eml` MIME is not retrievable through the connector) | `LEGAL-4321_AcmeCorp_2026-04-27_final.html` |
 | comments | `comments` | `.docx` | `LEGAL-4321_AcmeCorp_2026-04-27_comments.docx` |
 
-**Versioning for drafts:** the workflow uploads with `overwrite=true`, so the skill is responsible for picking the right `v{N}`. Before calling the workflow, list the existing files in the case folder via `mcp__microsoft-365__sharepoint_list_items` (read-only, reliable). Pick the next free `v{N}`. If the read fails, default to `v1` and surface a warning in `chat_summary`.
+**Versioning for drafts:** the workflow uploads with `overwrite=true`, so the skill is responsible for picking the right `v{N}`. Before calling the workflow, check for existing files: `sharepoint_search` with the ticket key as query, scoped by `folderName: {case_id}` (read-only, reliable). Pick the next free `v{N}`. If the search fails or is inconclusive, default to `v1` and surface a warning in `chat_summary`.
 
-**Attachment collisions:** if two attachments share an original-stem in the same call, append a counter: `attachment_NDA-Acme.pdf` → `attachment_NDA-Acme-2.pdf`.
+**Attachment collisions:** if two attachments share an original-stem in the same call, append a counter: `attachment_NDA-Acme.pdf` -> `attachment_NDA-Acme-2.pdf`.
 
 ---
 
@@ -124,9 +124,9 @@ For each file in the input list:
 
 2. **comments** -- render the Jira comment thread as a `.docx` (one heading per comment, author + timestamp as a sub-heading, body as paragraphs). Never `.md`.
 
-3. **final_email** -- fetch the `.eml` from Outlook by message ID (use `mcp__microsoft-365__outlook_email_search` to confirm the message and its raw MIME, or save the message body + headers as `.eml` directly).
+3. **final_email** -- locate the sent message via `outlook_email_search` (folder `Sent Items`), then `read_resource` for the full content. Render headers (from/to/cc/date/subject) plus the body as a single `.html` file, `mime_type: text/html`. Raw `.eml` MIME is NOT retrievable through the connector -- do not pretend otherwise.
 
-4. **attachment** -- download from the source (Jira attachment URL via `mcp__atlassian__fetch` or the equivalent Atlassian MCP fetch).
+4. **attachment** -- download from the source (Jira attachment URL via the Atlassian MCP fetch tool).
 
 5. Read the resulting bytes from disk, base64-encode, and pair with the IANA `mime_type`.
 
@@ -137,6 +137,8 @@ For each file in the input list:
 ## Step 4: Build `memory_instructions`
 
 The shared memory file lives at `myPOS Legal 1/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`. The workflow appends the `memory_instructions` string to it under a new `## Case: {case_id}` heading (the workflow adds the heading and timestamp).
+
+**`memory_instructions` must be a plain markdown STRING** -- never a JSON object like `{"append": ...}` (two such objects were pasted verbatim into the memory file on 2026-05-27).
 
 The skill builds the markdown body using the triage metadata + the caller's `memory_notes`:
 
@@ -149,7 +151,7 @@ The skill builds the markdown body using the triage metadata + the caller's `mem
 {if triage_metadata.risk_flags: "**Risk flags:** {flags}"}
 {if triage_metadata.human_review_required: "**Lawyer review required before send.**"}
 
-{caller's memory_notes -- typically: action taken, lawyer feedback summary, any pattern updates}
+{caller's memory_notes -- typically: action taken, lawyer feedback summary, processed_message_id lines, any pattern updates}
 ```
 
 If `memory_notes` is empty and `triage_metadata` is empty, the body is just `Filed by Legal Copilot.` -- the workflow still appends a timestamped entry so the audit trail is complete.
@@ -158,7 +160,7 @@ If `memory_notes` is empty and `triage_metadata` is empty, the body is just `Fil
 
 ## Step 5: Call the n8n workflow
 
-Use `mcp__n8n__execute_workflow` (or POST the webhook directly with `mcp__workspace__bash` curl as a fallback). The MCP route is preferred -- it's auth-free for workflows in our project and gives us the execution ID.
+Use the n8n MCP `execute_workflow` tool. **This is the ONLY transport.** Do NOT fall back to `curl` against the webhook -- the sandbox egress proxy blocks it (403 on CONNECT, observed 2026-06-02); the curl path can never work from a Cowork session. If the n8n MCP is unavailable in the session, return `success: false` with `error: "n8n_mcp_unavailable"` and stop.
 
 **Payload shape (the ONLY shape the workflow accepts):**
 
@@ -191,7 +193,7 @@ Use `mcp__n8n__execute_workflow` (or POST the webhook directly with `mcp__worksp
 Call:
 
 ```
-mcp__n8n__execute_workflow(
+execute_workflow(
   workflowId = "VAKq9Bra0RA0SdCO",
   executionMode = "production",
   inputs = <payload above>
@@ -200,15 +202,7 @@ mcp__n8n__execute_workflow(
 
 Wait for the response. Production runs respond synchronously through the workflow's `Respond to Webhook` node.
 
-**Curl fallback (if the MCP is unavailable):**
-
-```bash
-curl -sS -X POST https://myposai.app.n8n.cloud/webhook/legal-copilot-filing \
-  -H 'Content-Type: application/json' \
-  -d @payload.json
-```
-
-Pipe the JSON response into the same parsing logic.
+> **Planned 0.5.0:** the workflow will additionally accept `documents_from_jira: [{filename, jira_attachment_url, mime_type}]` (n8n fetches attachment bytes server-side) and `text_documents: [{filename, content_text, mime_type}]` (no base64 needed). Until that ships, large attachments that cannot be inlined must produce `success: false` / `document_too_large_to_inline` -- not a receipt stub.
 
 ### Known-good caller pattern
 
@@ -230,13 +224,13 @@ payload = {
                 "content_base64": b64,                   # the REAL bytes, base64-encoded
                 "mime_type": mime_type
             }],
-            "memory_instructions": memory_md             # markdown block from Step 4
+            "memory_instructions": memory_md             # markdown STRING from Step 4
         }
     }
 }
-# Then: mcp__n8n__execute_workflow(workflowId="VAKq9Bra0RA0SdCO",
-#                                   executionMode="production",
-#                                   inputs=payload)
+# Then: execute_workflow(workflowId="VAKq9Bra0RA0SdCO",
+#                        executionMode="production",
+#                        inputs=payload)
 ```
 
 ---
@@ -257,6 +251,8 @@ The workflow returns:
   "memory_file_path": "myPOS Legal 1/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md"
 }
 ```
+
+Check `documents_filed[].status` individually: `success_but_empty` (length 0) counts as a FAILURE for that document -- treat the call as `success: false` and say which file uploaded empty.
 
 Build the skill's return object from this:
 
@@ -287,9 +283,12 @@ The caller pipes `chat_summary` straight into:
 
 ## Hard rules
 
-- **NEVER bypass the n8n workflow.** Programmatic SharePoint writes via the M365 MCP are unreliable in this deployment; this skill exists precisely to centralise filing through n8n.
+- **NEVER bypass the n8n workflow.** The M365 MCP has no SharePoint write tools; this skill exists precisely to centralise filing through n8n.
+- **NEVER use curl/bash against the webhook.** Sandbox egress blocks it (403). The n8n MCP `execute_workflow` tool is the only transport; if it is unavailable, return `success: false` with `error: "n8n_mcp_unavailable"`.
 - **NEVER substitute a `.txt` "receipt" for the actual document.** If the caller is tempted to upload a small text file describing what the real document is (because inlining ~40 KB+ of base64 feels awkward) -- STOP. That defeats the entire purpose of the workflow. The lawyer never re-runs `/file-to-sharepoint` manually; the case folder ends up with a receipt and no real draft.
 - **If `content_base64` for the real document cannot be assembled inside one tool call**, the skill MUST return `success: false` with `error: "document_too_large_to_inline"` and surface the issue in `chat_summary`. The caller (`/triage`, `/triage-board`, `/triage-inbox`) MUST then halt -- DO NOT post the AI Triage Jira comment as if the filing succeeded. A failed filing with a clear error is better than a "successful" filing of a receipt stub.
 - **NEVER send `file_manifest`, `payload_path`, `documents_from_url`, or any other payload shape that is not the literal `documents: [{filename, content_base64, mime_type}]` array.** The workflow rejects everything else with `Document item missing filename or content_base64` (see execution 6727 on 2026-05-27 -- failed because the caller sent `file_manifest` + `payload_path` instead of inlining).
+- **`memory_instructions` is a markdown STRING, never a JSON object.**
 - **`case_folder` MUST be the matter-type folder name only** (e.g., `Regulatory Questions`, `Claims`, `NDAs`) -- NOT `Regulatory Questions/LEGAL-5261`. The workflow concatenates `case_id` itself; passing the case id twice produces an ugly `.../Claims/LEGAL-4912/LEGAL-4912/...` path (see execution 6727).
-- **Memory file path is `myPOS Legal 1/...`, not `myPOS Legal/...`** -- confirmed by the live workflow's `Prepare State` node. Earlier docs in this skill used `myPOS Legal/`; the workflow's actual base path is `myPOS Legal 1/` (note the trailing space-1). Any documentation referencing the old path is stale.
+- **Memory file path is `myPOS Legal 1/...`, not `myPOS Legal/...`** -- confirmed by the live workflow's `Prepare State` node. A stale duplicate exists at the old path (last write 2026-05-19); never read or cite it. Any documentation referencing the old path is stale.
+- **Treat `success_but_empty` uploads as failures** for the affected document (that is how the 12-byte and 13-byte stubs of 2026-05-27 and 2026-06-03 slipped through).
