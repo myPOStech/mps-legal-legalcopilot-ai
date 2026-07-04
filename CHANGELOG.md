@@ -2,6 +2,23 @@
 
 All notable changes to the myPOS Legal Copilot plugin.
 
+## [0.4.5] - 2026-07-04
+
+SharePoint filing relocation. Legal triage outputs and the shared memory file now land in the shared Legal team library `myPOS Legal/` instead of the private `myPOS Legal 1/` library that only the workflow owner could reach.
+
+### Changed
+- **Filing destination moved from the private `myPOS Legal 1/` library to the shared `myPOS Legal/` team library.** Target root is now `/sites/legal/Shared Documents/myPOS Legal/Claude skills memory/Copilot`. The `myPOS Legal 1/` copy was reachable only by the workflow owner, so the rest of the Legal team could not open filed documents or the shared memory file.
+- **n8n `Legal Copilot` workflow (`VAKq9Bra0RA0SdCO`) repointed and republished.** Three references updated: the `Prepare State` node's `docs_root` and `memory_file_path`, and the hard-coded folder URL in `Upload Updated Memory File`. Every other path (folder creation, per-document upload, memory download) is derived from these, so the production webhook now writes to the shared library.
+- **All plugin references repointed to `myPOS Legal/`.** `sharepoint-filer` and `jira-auto-assign` skills plus the `/triage`, `/triage-board`, `/triage-inbox` and `/reply-and-close` commands. The "never read the stale copy" guardrails are inverted: the shared `myPOS Legal/` file is now canonical and the old private `myPOS Legal 1/` copy is the one never to read or cite. This reverses the 0.4.3 and 0.4.4 guidance, which had treated the private library as canonical.
+
+### Note
+- The shared `myPOS Legal/` memory file goes live again on the next filing. Entries written to the private `myPOS Legal 1/` copy since the two diverged are not carried over automatically; migrate that history manually if the shared file needs it.
+
+### Plugin version
+- Bumped to **0.4.5**.
+
+---
+
 ## [0.4.4] - 2026-07-03
 
 Reality-alignment release, driven by the first weekly usage review (30 days of session transcripts, n8n execution logs, and a live tool inventory). Removes every reference to Microsoft 365 tools that do not exist, hardens scheduled sweeps against mid-run death, and reworks `/reply-and-close` to a lawyer-sends-first flow.
