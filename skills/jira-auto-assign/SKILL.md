@@ -28,7 +28,7 @@ Optional (used only by `/triage-board` Phase 2): `force_reassign: true`, `overri
 
 ## Step 1: Load routing rules
 
-Read `${CLAUDE_PLUGIN_ROOT}/knowledge/team-routing.md`. If that path is unreadable (app-internal path; common in scheduled runs), fetch `team-routing.md` from the SharePoint `_knowledge` folder instead: `sharepoint_search` for `team-routing` -> take the hit under `/myPOS Legal 1/` -> `read_resource` on its `uri`.
+Read `${CLAUDE_PLUGIN_ROOT}/knowledge/team-routing.md`. If that path is unreadable (app-internal path; common in scheduled runs), fetch `team-routing.md` from the SharePoint `_knowledge` folder instead: `sharepoint_search` for `team-routing` -> take the hit under `/myPOS Legal/` -> `read_resource` on its `uri`.
 
 Parse:
 
@@ -62,7 +62,7 @@ Otherwise `severity = "normal"`.
 
 ### If severity = high
 
-1. Read the SharePoint memory file: `sharepoint_search` for `legal_copilot_memory` -> take the hit whose `webUrl` contains `/myPOS Legal 1/` (NEVER the stale `/myPOS Legal/` copy) -> `read_resource` on its `uri`.
+1. Read the SharePoint memory file: `sharepoint_search` for `legal_copilot_memory` -> take the hit whose `webUrl` contains `/myPOS Legal/` (NEVER the old private `/myPOS Legal 1/` copy) -> `read_resource` on its `uri`.
 2. Search for the line `<!-- legal-copilot:high-severity-counter:N -->`. Extract `N` (integer). If missing, `N = 0`.
 3. If `N % 2 == 0`: candidate is `high_severity_pool[0]`. Else `high_severity_pool[1]`.
 4. After the assignment succeeds (Step 5), increment `N` via the n8n filing workflow (Step 6).
@@ -147,5 +147,5 @@ The calling command embeds this verbatim into the AI Triage Jira comment under a
 - NEVER guess an account_id. If lookup fails, fall back to the senior_reviewer.
 - NEVER reassign a ticket that already has an assignee unless the caller passes `force_reassign: true` (used only by `/triage-board` last-replier logic). Default is single-shot.
 - NEVER edit `team-routing.md` from this skill. The team owns that file.
-- NEVER read the stale memory file under `myPOS Legal/` (no trailing " 1").
+- NEVER read the old private memory file under `myPOS Legal 1/` (trailing " 1").
 - ALWAYS assign AFTER any status transition in the same flow, and verify the assignee stuck.
