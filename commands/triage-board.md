@@ -14,7 +14,7 @@ Process every To-Do ticket on the legal board: dedupe, classify, draft, three-pa
 - Atlassian Cloud ID: `fb47470f-f5c2-44bc-8182-f2a22f059adb`
 - Default JQL: `project in (LEGAL, AIRD) AND status = "To Do" ORDER BY created ASC`
 - n8n workflow ID: `VAKq9Bra0RA0SdCO`
-- Shared memory file: `myPOS Legal 1/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md` (**the trailing " 1" matters -- a stale copy exists under `myPOS Legal/` and must never be read**)
+- Shared memory file: `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md` (**the shared Legal team library -- an old private copy exists under `myPOS Legal 1/` and must never be read**)
 - Team routing config: `${CLAUDE_PLUGIN_ROOT}/knowledge/team-routing.md`
 
 > **Tool naming:** Microsoft 365 and Atlassian tools may be mounted under a session-specific server prefix. Match tools by suffix. If a tool named here does not exist under any prefix, follow the step's fallback -- do not invent a tool name.
@@ -26,7 +26,7 @@ Scheduled sweeps have died mid-run from oversized payloads (4 of 12 runs in June
 - The board-scan JQL MUST request only: `key, summary, status, assignee, priority, duedate, updated, labels`. Never fetch descriptions or comments in the board scan.
 - Fetch full ticket content ONLY for tickets selected for new triage, ONE at a time, with `responseContentFormat: markdown`. If a single payload still exceeds ~20K tokens, work from summary + the first 2000 characters of the description.
 - Run each per-ticket triage inside the `triage-reviewer` / `business-reviewer` subagent pipeline; never hold more than one full ticket in the main context.
-- Read ONLY the live memory file under `myPOS Legal 1/`. Never open the stale `myPOS Legal/` copy even if search returns it.
+- Read ONLY the live memory file under `myPOS Legal/`. Never open the old private `myPOS Legal 1/` copy even if search returns it.
 - Cap new triages at 3 per sweep. List deferred tickets in the Phase 6 summary.
 - **Checkpoint after every phase:** append one line to a local run-log file (`run-log-{date}.md` in the working folder): phase name, tickets written to, timestamp. If the run dies, the next sweep (or a human) can see exactly what was already applied to Jira.
 
@@ -34,7 +34,7 @@ Scheduled sweeps have died mid-run from oversized payloads (4 of 12 runs in June
 
 ### 1a. Read shared memory
 
-The Microsoft 365 connector has no direct path-read tool. Use: `sharepoint_search` for `legal_copilot_memory` -> take the hit whose `webUrl` contains `/myPOS Legal 1/` -> `read_resource` on its `uri`.
+The Microsoft 365 connector has no direct path-read tool. Use: `sharepoint_search` for `legal_copilot_memory` -> take the hit whose `webUrl` contains `/myPOS Legal/` -> `read_resource` on its `uri`.
 
 Plus the bundled seeds in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
 
@@ -195,7 +195,7 @@ SharePoint case folders created:
   {list of URLs}
 
 Memory file updated:
-  https://mypos0.sharepoint.com/sites/legal/Shared%20Documents/myPOS%20Legal%201/Claude%20skills%20memory/Copilot/_knowledge/legal_copilot_memory.md
+  https://mypos0.sharepoint.com/sites/legal/Shared%20Documents/myPOS%20Legal/Claude%20skills%20memory/Copilot/_knowledge/legal_copilot_memory.md
 
 {if pattern proposals: "PROPOSED PATTERNS (review and approve):"}
 {pattern proposals}
@@ -221,4 +221,4 @@ File the run summary via the n8n workflow under `_runs/triage-board/RUN-{date}-b
 - NEVER post the priority/due/flag/assignee as a comment -- those are fields now (set by `jira-fields-and-flags` and `jira-auto-assign`).
 - NEVER violate the Phase 0 context budget: compact JQL fields, one full ticket at a time, subagent isolation, 3-triage cap, per-phase checkpoints.
 - NEVER re-triage a ticket whose AI Triage comment has no human reply after it.
-- NEVER read the stale memory file under `myPOS Legal/` (no trailing " 1").
+- NEVER read the old private memory file under `myPOS Legal 1/` (trailing " 1").
