@@ -14,7 +14,7 @@ argument-hint: <TICKET-KEY> [--dry-run]
 
 - Atlassian Cloud ID: `fb47470f-f5c2-44bc-8182-f2a22f059adb`
 - n8n workflow ID: `VAKq9Bra0RA0SdCO`
-- Shared memory file: `myPOS Legal 1/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md` (never the stale `myPOS Legal/` copy)
+- Shared memory file: `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md` (never the old private `myPOS Legal 1/` copy)
 
 ## Input
 
@@ -185,4 +185,4 @@ Filed and closed {ticket_key}:
 - NEVER bypass the n8n workflow with a direct M365 SharePoint write.
 - NEVER fall back to local-Desktop saving on workflow failure. Surface the error and let the lawyer retry.
 - NEVER fabricate the recipient list -- it must come from the sent email located in Step 3 (or the lawyer's pasted copy, marked as such).
-- NEVER read the stale memory file under `myPOS Legal/` (no trailing " 1").
+- NEVER read the old private memory file under `myPOS Legal 1/` (trailing " 1").

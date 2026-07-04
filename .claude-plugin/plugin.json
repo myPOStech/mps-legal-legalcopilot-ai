@@ -1,7 +1,7 @@
 {
   "name": "mypos-legal-copilot",
   "description": "AI triage and drafting assistant for the myPOS Legal team. Bundles the 10 legal-triage skills, Devil's advocate review, n8n-backed SharePoint filing, and Jira/Outlook commands so a lawyer can install once and triage a Jira board, an inbox, or a single ticket from Claude Code.",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "author": {
     "name": "myPOS AI Transformation",
     "email": "ai@mypos.com"

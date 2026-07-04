@@ -14,7 +14,7 @@ Read recent emails in the legal mailbox, dedupe against existing Jira tickets, c
 - Default count: 10 emails
 - Process order: oldest first
 - n8n workflow ID: `VAKq9Bra0RA0SdCO`
-- Shared memory file: `myPOS Legal 1/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md` (never the stale `myPOS Legal/` copy)
+- Shared memory file: `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md` (never the old private `myPOS Legal 1/` copy)
 
 > **Capability note:** the Microsoft 365 connector is READ-ONLY for mail. There is no tool to mark an email read, tag it, move it, or send. Idempotency comes from the Jira dedupe (Phase 3b) plus the processed-message log in the memory file -- NOT from read-state.
 
@@ -29,7 +29,7 @@ Read recent emails in the legal mailbox, dedupe against existing Jira tickets, c
 
 ## Phase 1: Load shared knowledge from SharePoint
 
-Use `sharepoint_search` for `legal_copilot_memory` -> take the hit whose `webUrl` contains `/myPOS Legal 1/` -> `read_resource` on its `uri`.
+Use `sharepoint_search` for `legal_copilot_memory` -> take the hit whose `webUrl` contains `/myPOS Legal/` -> `read_resource` on its `uri`.
 
 Plus the bundled seed `${CLAUDE_PLUGIN_ROOT}/knowledge/patterns.md`.
 
@@ -132,4 +132,4 @@ Inbox triage complete: {N} emails processed
 - NEVER mention individuals by name in ticket descriptions of sensitive matters -- use roles.
 - NEVER override risk gates.
 - NEVER bypass the n8n workflow for SharePoint writes.
-- NEVER read the stale memory file under `myPOS Legal/` (no trailing " 1").
+- NEVER read the old private memory file under `myPOS Legal 1/` (trailing " 1").

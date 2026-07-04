@@ -1,6 +1,6 @@
 ---
 name: sharepoint-filer
-description: File triage outputs (drafts, attachments, sent emails, comment threads) directly into SharePoint by calling the team's n8n "Legal Copilot" workflow. The workflow creates the case folder, uploads every document, and appends an entry to the shared memory file at `myPOS Legal 1/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`. Returns the SharePoint URL of every uploaded file plus the memory-file URL so callers can cite them in Jira and chat. Replaces the old local-Desktop-mirroring flow -- no manual drag-and-drop required.
+description: File triage outputs (drafts, attachments, sent emails, comment threads) directly into SharePoint by calling the team's n8n "Legal Copilot" workflow. The workflow creates the case folder, uploads every document, and appends an entry to the shared memory file at `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`. Returns the SharePoint URL of every uploaded file plus the memory-file URL so callers can cite them in Jira and chat. Replaces the old local-Desktop-mirroring flow -- no manual drag-and-drop required.
 ---
 
 # SharePoint filer (n8n-backed)
@@ -18,11 +18,11 @@ Push every triage output to SharePoint in one round trip by calling the team's n
 | Production webhook | `https://myposai.app.n8n.cloud/webhook/legal-copilot-filing` |
 | Method | `POST` |
 | Available in MCP | yes -- callable via the n8n `execute_workflow` tool |
-| What it does | Creates `/sites/legal/Shared Documents/myPOS Legal 1/Claude skills memory/Copilot/{case_folder}/{case_id}/`, uploads each document, downloads the memory file, appends a markdown entry, re-uploads it, returns a JSON summary |
-| Memory file location | `myPOS Legal 1/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md` |
-| SharePoint root | `https://mypos0.sharepoint.com/sites/legal/Shared Documents/myPOS Legal 1/Claude skills memory/Copilot/` |
+| What it does | Creates `/sites/legal/Shared Documents/myPOS Legal/Claude skills memory/Copilot/{case_folder}/{case_id}/`, uploads each document, downloads the memory file, appends a markdown entry, re-uploads it, returns a JSON summary |
+| Memory file location | `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md` |
+| SharePoint root | `https://mypos0.sharepoint.com/sites/legal/Shared Documents/myPOS Legal/Claude skills memory/Copilot/` |
 
-> The base path is `myPOS Legal 1/` (note the trailing ` 1`), not `myPOS Legal/`. Earlier docs were stale. Confirmed against the live workflow's `Prepare State` node. A stale duplicate memory file exists under `myPOS Legal/` -- never read or cite it.
+> The base path is `myPOS Legal/` -- the shared Legal team library at `/sites/legal/Shared Documents/myPOS Legal/Claude skills memory/Copilot`. Confirmed against the live workflow's `Prepare State` node. An older copy exists under `myPOS Legal 1/` (reachable only by the workflow owner, not the wider team) -- never read or cite it.
 
 ## Inputs
 
@@ -78,7 +78,7 @@ The team can override these in `knowledge/sharepoint-map.md`. If the file has a 
 
 `case_folder` is the **matter-type folder name only**. Do NOT include the ticket key -- the workflow concatenates it. Passing `Claims/LEGAL-4912` produces `.../Claims/LEGAL-4912/LEGAL-4912/` (confirmed in execution 6727 on 2026-05-27).
 
-The workflow builds the final SharePoint path as `myPOS Legal 1/Claude skills memory/Copilot/{case_folder}/{case_id}/`. This skill does NOT need to know the SharePoint base URL -- the workflow owns it.
+The workflow builds the final SharePoint path as `myPOS Legal/Claude skills memory/Copilot/{case_folder}/{case_id}/`. This skill does NOT need to know the SharePoint base URL -- the workflow owns it.
 
 ---
 
@@ -136,7 +136,7 @@ For each file in the input list:
 
 ## Step 4: Build `memory_instructions`
 
-The shared memory file lives at `myPOS Legal 1/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`. The workflow appends the `memory_instructions` string to it under a new `## Case: {case_id}` heading (the workflow adds the heading and timestamp).
+The shared memory file lives at `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`. The workflow appends the `memory_instructions` string to it under a new `## Case: {case_id}` heading (the workflow adds the heading and timestamp).
 
 **`memory_instructions` must be a plain markdown STRING** -- never a JSON object like `{"append": ...}` (two such objects were pasted verbatim into the memory file on 2026-05-27).
 
@@ -248,7 +248,7 @@ The workflow returns:
     { "filename": "...", "sharepoint_url": "https://mypos0.sharepoint.com/...", "status": "success" }
   ],
   "memory_file_updated": true,
-  "memory_file_path": "myPOS Legal 1/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md"
+  "memory_file_path": "myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md"
 }
 ```
 
@@ -261,9 +261,9 @@ Build the skill's return object from this:
   "success": true,
   "case_folder": "NDAs",
   "case_id": "LEGAL-4321",
-  "sharepoint_folder_url": "https://mypos0.sharepoint.com/sites/legal/Shared Documents/myPOS Legal 1/Claude skills memory/Copilot/NDAs/LEGAL-4321/",
+  "sharepoint_folder_url": "https://mypos0.sharepoint.com/sites/legal/Shared Documents/myPOS Legal/Claude skills memory/Copilot/NDAs/LEGAL-4321/",
   "documents_filed": ["...passthrough..."],
-  "memory_file_url": "https://mypos0.sharepoint.com/sites/legal/Shared Documents/myPOS Legal 1/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md",
+  "memory_file_url": "https://mypos0.sharepoint.com/sites/legal/Shared Documents/myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md",
   "memory_file_updated": true,
   "chat_summary": "<the workflow's `message` field, lightly reformatted>"
 }
@@ -290,5 +290,5 @@ The caller pipes `chat_summary` straight into:
 - **NEVER send `file_manifest`, `payload_path`, `documents_from_url`, or any other payload shape that is not the literal `documents: [{filename, content_base64, mime_type}]` array.** The workflow rejects everything else with `Document item missing filename or content_base64` (see execution 6727 on 2026-05-27 -- failed because the caller sent `file_manifest` + `payload_path` instead of inlining).
 - **`memory_instructions` is a markdown STRING, never a JSON object.**
 - **`case_folder` MUST be the matter-type folder name only** (e.g., `Regulatory Questions`, `Claims`, `NDAs`) -- NOT `Regulatory Questions/LEGAL-5261`. The workflow concatenates `case_id` itself; passing the case id twice produces an ugly `.../Claims/LEGAL-4912/LEGAL-4912/...` path (see execution 6727).
-- **Memory file path is `myPOS Legal 1/...`, not `myPOS Legal/...`** -- confirmed by the live workflow's `Prepare State` node. A stale duplicate exists at the old path (last write 2026-05-19); never read or cite it. Any documentation referencing the old path is stale.
+- **Memory file path is `myPOS Legal/...`, not `myPOS Legal 1/...`** -- confirmed by the live workflow's `Prepare State` node. The `myPOS Legal 1/` copy is the old private path (reachable only by the workflow owner); never read or cite it. Any documentation referencing the old private path is stale.
 - **Treat `success_but_empty` uploads as failures** for the affected document (that is how the 12-byte and 13-byte stubs of 2026-05-27 and 2026-06-03 slipped through).

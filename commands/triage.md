@@ -12,7 +12,7 @@ Triage a single legal request end-to-end. The ticket does **not** move to Done -
 - Atlassian Cloud ID: `fb47470f-f5c2-44bc-8182-f2a22f059adb`
 - Projects watched: `LEGAL`, `AIRD`
 - n8n filing workflow ID: `VAKq9Bra0RA0SdCO`
-- Shared memory file: `myPOS Legal 1/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`
+- Shared memory file: `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`
 - Team routing config: `${CLAUDE_PLUGIN_ROOT}/knowledge/team-routing.md`
 
 > **Tool naming:** Microsoft 365 and Atlassian tools may be mounted under a session-specific server prefix. Match tools by suffix (`sharepoint_search`, `read_resource`, `outlook_email_search`, `getJiraIssue`, ...). If a tool named in this file does not exist under any prefix, treat that step per its own fallback instructions -- do not invent a tool name.
@@ -33,7 +33,7 @@ If `$ARGUMENTS` is empty, ask the user what to triage.
 The Microsoft 365 connector has no direct path-read tool. Read the shared memory file with this exact pattern:
 
 1. `sharepoint_search` with query `legal_copilot_memory`.
-2. Take the result whose `webUrl` contains `/myPOS Legal 1/`. **IGNORE any result under `/myPOS Legal/` (no trailing " 1") -- that copy is stale (last write 2026-05-19) and must never be read or cited.**
+2. Take the result whose `webUrl` contains `/myPOS Legal/`. **IGNORE any result under `/myPOS Legal 1/` (trailing " 1") -- that is the old private copy and must never be read or cited.**
 3. `read_resource` with the returned `uri`.
 
 Plus the bundled seed knowledge in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
@@ -283,5 +283,5 @@ Triage complete for {ticket_key}:
 - NEVER post the AI Triage comment if the n8n filing returned `success: false`.
 - NEVER substitute a `.txt` "receipt" for the real `.docx` when calling the filer. If base64-inlining is impossible, the filer must return `success: false` with `error: "document_too_large_to_inline"` and `/triage` must halt.
 - NEVER bypass the n8n workflow with a direct M365 SharePoint write.
-- NEVER read or cite the stale memory file under `myPOS Legal/` (no trailing " 1").
+- NEVER read or cite the old private memory file under `myPOS Legal 1/` (trailing " 1").
 - NEVER fall back to local-Desktop saving when n8n fails.
