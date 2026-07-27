@@ -2,6 +2,19 @@
 
 All notable changes to the myPOS Legal Copilot plugin.
 
+## [0.4.6] - 2026-07-27
+
+Applied from the weekly usage review. Corrects the Outlook draft tool name and aligns the filing input contract.
+
+### Fixed
+- **Outlook draft tool name.** `/triage` Step 9 and `/triage-board` no longer assert that no draft tool exists. They now match a create-draft tool by suffix `outlook_create_draft` (the connected Microsoft 365 connector's real name, verified on LEGAL-5438, 15 Jul 2026) and create a native draft in the lawyer's Outlook Drafts folder when present, falling back to the Jira comment + SharePoint .docx. The prior wrong name `outlook_email_create_draft` is removed from Step 9, the hard rules, and the `settings.json` allow-list. The phantom `outlook_email_send` entry is removed (the Copilot never sends).
+- **sharepoint-filer input contract.** The Inputs table previously documented a `files: [{name, source, content_or_url, role}]` shape that did not match the n8n workflow. It now documents the real contract the workflow accepts: `documents` (base64), `text_documents` (plain text; `content_text` or `content`), and `documents_from_jira` (server-side fetch). Removes the three-vocabulary drift.
+
+### Plugin version
+- Bumped to **0.4.6**.
+
+---
+
 ## [0.4.5] - 2026-07-04
 
 SharePoint filing relocation. Legal triage outputs and the shared memory file now land in the shared Legal team library `myPOS Legal/` instead of the private `myPOS Legal 1/` library that only the workflow owner could reach.

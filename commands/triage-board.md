@@ -115,7 +115,7 @@ For each remaining To-Do ticket (max 3 per sweep), follow `/triage`'s Steps 2-10
 6. Business reviewer (`business-reviewer` subagent)
 7. Auto-assign (`jira-auto-assign`) + set fields (`jira-fields-and-flags`)
 8. File outputs to SharePoint via `sharepoint-filer` (n8n)
-9. Deliver the draft (Jira comment + SharePoint .docx; n8n draft workflow if deployed -- see `/triage` Step 9. There is no Outlook draft tool in the connector.)
+9. Deliver the draft (Jira comment + SharePoint .docx; plus a native Outlook draft when a tool with suffix `outlook_create_draft` is present, else the n8n draft workflow if deployed -- see `/triage` Step 9.)
 10. Post the AI Triage Jira comment
 
 ### Ticket disposition
@@ -210,7 +210,7 @@ File the run summary via the n8n workflow under `_runs/triage-board/RUN-{date}-b
 
 ## Hard rules
 
-- NEVER send emails. No send tool exists; drafts are delivered via the Jira comment and SharePoint (see `/triage` Step 9).
+- NEVER send emails. The Copilot only creates drafts (Jira comment, SharePoint .docx, and a native Outlook draft when `outlook_create_draft` is available); the lawyer sends from Outlook (see `/triage` Step 9).
 - NEVER auto-close a triaged ticket. Closing is lawyer-gated via `/reply-and-close`. Only confirmed duplicates auto-close.
 - NEVER auto-edit any skill. Propose patterns, wait for human approval.
 - NEVER bypass the n8n workflow for SharePoint writes.

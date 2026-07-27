@@ -33,7 +33,9 @@ The caller (`/triage`, `/file-to-sharepoint`, `/reply-and-close`, `/triage-board
 | `ticket_key` | yes | Jira key (e.g., `LEGAL-4321`). Becomes `case_id` in the n8n payload. |
 | `ticket_summary` | yes | Ticket title. Used in filenames and as part of the memory entry. |
 | `matter_type` | yes | One of the 10 matter types (NDA, contract review, regulatory question, corporate change, project, KYC support, GTCs, materials review, claims, inspection support). Maps to the matter-type folder name. |
-| `files` | yes | List of `{name, source, content_or_url, role, mime_type}` where `role` ∈ `{draft, attachment, final_email, comments}` and `mime_type` is the IANA type (e.g., `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `application/pdf`, `text/html`). |
+| `documents` | yes* | Binary/base64 documents. List of `{filename, content_base64, mime_type}` (IANA type, e.g. `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `application/pdf`, `text/html`). This is the literal shape the n8n workflow expects. At least one of `documents`, `text_documents`, or `documents_from_jira` is required. |
+| `text_documents` | optional | Plain-text/markdown/html bodies. List of `{filename, content_text, mime_type}`. The workflow base64-encodes these server-side and accepts either `content_text` or `content` as the field name. |
+| `documents_from_jira` | optional | Attachments the workflow fetches server-side. List of `{filename, jira_attachment_url, mime_type}`. Removes the need to inline large attachments as base64. |
 | `review_findings` | optional | Devil's advocate findings. Embedded as anchored Word comments inside the draft `.docx` BEFORE base64-encoding. List of `{severity, location, issue, suggested_edit}`. |
 | `counterparty` | optional | If known, used in filenames; otherwise derived from the ticket. |
 | `memory_notes` | optional | Free-text notes the caller wants appended to the shared memory file. The skill builds the final `memory_instructions` markdown block from these + the structured triage metadata. |
