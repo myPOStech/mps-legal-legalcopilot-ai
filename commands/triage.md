@@ -195,15 +195,16 @@ The filer base64-encodes the `.docx` (and every Jira attachment) and inlines the
 
 ## Step 9: Deliver the draft
 
-There is NO draft-creation tool in the Microsoft 365 connector (it is read-only for mail: search + read_resource only). Do not attempt `outlook_email_create_draft` -- it has never existed in this environment. Draft delivery works like this:
+Draft delivery has three surfaces, in order of preference:
 
-1. The full draft goes into the "Draft Response" section of the AI Triage Jira comment (Step 10). That comment is the lawyer's review surface.
+1. The full draft ALWAYS goes into the "Draft Response" section of the AI Triage Jira comment (Step 10). That comment is the lawyer's primary review surface, and the guaranteed fallback.
 2. The annotated `.docx` filed to SharePoint in Step 8 is the editable copy.
-3. If the n8n workflow `legal-copilot-draft` exists (check once per session with the n8n `search_workflows` tool), call it via `execute_workflow` with:
+3. Native Outlook draft (best effort). Match a draft-creation tool by SUFFIX, not by a hard-coded name: look for a tool whose suffix is `outlook_create_draft` (observed working on LEGAL-5438, 15 Jul 2026). If present, call it with:
    ```json
-   {"ticket_key": "{key}", "subject": "Re: {ticket summary}", "body_html": "{final_draft as HTML with a DRAFT banner}"}
+   {"subject": "Re: {ticket summary}", "body": "{final_draft as HTML with a DRAFT banner}", "bodyType": "html"}
    ```
-   and include the returned `webLink` in Steps 10 and 11. If it does not exist, the draft simply lives in the Jira comment -- no warning needed, this is the designed behaviour.
+   Include the returned `webLink` in Steps 10 and 11. The draft lands in the lawyer's own Outlook Drafts folder; it is never sent. If no draft tool is present under any prefix this session, skip silently -- the Jira comment and SharePoint `.docx` are sufficient. Do NOT invent a tool name.
+4. If the connector draft tool is absent but the n8n `legal-copilot-draft` workflow is deployed (check once per session with the n8n `search_workflows` tool), call it via `execute_workflow` with `{"ticket_key": "{key}", "subject": "Re: {ticket summary}", "body_html": "{final_draft as HTML}"}` and include the returned `webLink`. If neither exists, the draft lives in the Jira comment -- designed behaviour, no warning needed.
 
 ---
 
@@ -270,8 +271,8 @@ Triage complete for {ticket_key}:
 
 ## Hard rules
 
-- NEVER send emails. No send tool exists in this environment; the lawyer sends from Outlook. The Copilot's draft lives in the Jira comment, the SharePoint .docx, and (when the n8n draft workflow is deployed) an Outlook draft.
-- NEVER attempt `outlook_email_create_draft` or any other tool not present in the session. If a capability is missing, follow the step's documented fallback.
+- NEVER send emails. The Copilot only creates drafts; the lawyer reviews and sends from Outlook. The draft lives in the Jira comment, the SharePoint .docx, and (when a draft tool is available) the lawyer's Outlook Drafts folder.
+- Match Microsoft 365 tools by SUFFIX. The connected connector exposes `outlook_create_draft` (create-draft) and `outlook_email_search` (read); it does NOT expose a tool named `outlook_email_create_draft`. Never invent a tool name; if a needed suffix is absent this session, follow the step's documented fallback.
 - NEVER move the ticket to Done. That's `/reply-and-close`'s job.
 - NEVER post priority, due date, deadline, flag, or assignee as a Jira comment. Use the fields.
 - NEVER skip the business reviewer pass. Three opinions, every time.
