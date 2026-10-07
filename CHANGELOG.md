@@ -2,6 +2,29 @@
 
 All notable changes to the myPOS Legal Copilot plugin.
 
+## [0.4.8] - 2026-10-07
+
+Applied from the weekly usage review of 2 Oct 2026 (FIX-01 to FIX-06).
+
+### Fixed
+- **Outlook drafts (FIX-01).** `/triage` Step 9 now prefers `outlook_create_reply_draft` when the original Outlook message id is known (keeps the draft in the thread), else `outlook_create_draft`. Subject `[AI DRAFT {key}] Re: ...`, AI DRAFT banner, requester only. The n8n fallback now searches for the real workflow name `Legal Copilot Draft` (`zMZJM8RvzluqLIrl`) and uses it only when active; it was searching for `legal-copilot-draft`, which never matched. A missing draft never halts a triage; the reason is recorded. `/triage-inbox` and `/reply-and-close` no longer claim that no draft tool exists. Send tools (`outlook_send_mail`, `outlook_send_draft`, `outlook_forward_mail`) are explicitly forbidden. `settings.json` allows `outlook_create_reply_draft`.
+- **Devil's advocate review ran against a placeholder (FIX-02).** `agents/triage-reviewer.md` called `devils-advocate-review`, which resolves to this plugin's own stub. It now calls `anthropic-skills:devils-advocate` and treats any loaded text containing "STUB" as not resolved. `/triage` Step 4 and `/triage-board` invoke the published `anthropic-skills:legal-triage-*` skills by full name. All 11 stub skills now have the description `DO NOT INVOKE` so they no longer trigger on their own.
+- **sharepoint-filer contract (FIX-03).** Removed the stale "Planned 0.5.0" note: `text_documents` and `documents_from_jira` are live. Jira attachments are now passed by URL in `documents_from_jira` (no download, no size problem); the sent email goes in `text_documents`. Every `.docx` is zip-validated before upload (`docx_invalid` on failure); without a sandbox shell the draft is filed as `.md` instead of hand-assembled base64. Same changes in `/file-to-sharepoint`, `/reply-and-close` and `/triage` Step 8.
+- **n8n MCP endpoint (FIX-05).** `.mcp.json` pointed at `https://myposai.app.n8n.cloud/mcp`, which returns 404 (ENDPOINT_NOT_FOUND since 24 Aug). Now `https://myposai.app.n8n.cloud/mcp-server/http` (verified 7 Oct 2026: returns 401 without auth, i.e. the endpoint exists).
+
+### Changed
+- **n8n `Legal Copilot` workflow (FIX-04, server side, published 7 Oct 2026).** .docx ZIP-header check, `case_folder` validation, HTTP 422 JSON errors, retries with backoff, automatic memory-file archiving above 250,000 characters, and a guard that stops the run instead of overwriting the memory file when it cannot be read. Details and rollback: `docs/n8n-legal-copilot-workflow.md`.
+- **`settings.json` (FIX-05).** Allow-listed read-only tools used by scheduled runs: `sharepoint_search`, `read_resource`, `get_granted_scopes`, n8n `search_workflows`, `search_workflow_executions`, `get_workflow_execution`, `get_workflow_history`.
+
+### Added
+- `docs/prompt-templates.md` (FIX-06): templates for single-ticket triage, contract review, regulatory questions, translation, and a connector preflight line.
+- `docs/n8n-legal-copilot-workflow.md`: accepted body, responses, and change log of the filing workflow.
+
+### Plugin version
+- Bumped to **0.4.8**. Cowork installs were still on 0.4.5 on 2 Oct 2026; run `/plugin update` (or reinstall via the plugin customizer) so 0.4.6 to 0.4.8 actually reach the scheduled runs.
+
+---
+
 ## [0.4.7] - 2026-10-07
 
 Routing change.
