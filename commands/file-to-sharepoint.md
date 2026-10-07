@@ -115,10 +115,10 @@ One Word comment per finding (anchored to the relevant text range), plus a final
 For each file:
 
 1. **AI draft** -- if a recent draft exists in the most recent AI Triage Jira comment, render it to `.docx` (use the `docx` skill -- never `.md`). If review findings are present in the AI Triage comment, embed them as Word comments inside the draft `.docx`.
-2. **Jira attachments** -- download via `mcp__atlassian__fetch` (or the equivalent Atlassian MCP fetch). Skip any whose target filename already exists in the case folder.
+2. **Jira attachments** -- do NOT download them. List each one in `documents_from_jira` as `{filename, jira_attachment_url, mime_type}`; the workflow fetches the bytes server-side. Skip any whose target filename already exists in the case folder.
 3. **Jira comment thread** (only if `--include-comments`) -- render the full thread as `comments.docx` (one heading per comment, author + timestamp as sub-heading, body as paragraphs).
 
-For each file, base64-encode the bytes and pair with the IANA `mime_type`:
+For each file Claude builds (the draft and comments `.docx`), run the zip check from `sharepoint-filer` Step 3 item 6, then base64-encode the bytes into `documents` and pair with the IANA `mime_type`:
 
 | File type | mime_type |
 |---|---|

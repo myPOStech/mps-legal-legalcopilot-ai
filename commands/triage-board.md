@@ -109,13 +109,13 @@ For each remaining To-Do ticket (max 3 per sweep), follow `/triage`'s Steps 2-10
 
 1. Fetch ticket (one at a time, compact format)
 2. Dedupe
-3. Classify with the matching legal-triage skill
+3. Classify with the matching legal-triage skill, invoked by its full published name `anthropic-skills:legal-triage-{type}` (never the `mypos-legal-copilot:` stub; see `/triage` Step 4); the Devil's advocate pass uses `anthropic-skills:devils-advocate`
 4. Apply risk gates
 5. Devil's advocate review (`triage-reviewer` subagent)
 6. Business reviewer (`business-reviewer` subagent)
 7. Auto-assign (`jira-auto-assign`) + set fields (`jira-fields-and-flags`)
 8. File outputs to SharePoint via `sharepoint-filer` (n8n)
-9. Deliver the draft (Jira comment + SharePoint .docx; plus a native Outlook draft when a tool with suffix `outlook_create_draft` is present, else the n8n draft workflow if deployed -- see `/triage` Step 9.)
+9. Deliver the draft (Jira comment + SharePoint .docx; plus a native Outlook draft via the tool with suffix `outlook_create_reply_draft` or `outlook_create_draft`, else the n8n `Legal Copilot Draft` workflow when active -- see `/triage` Step 9. A missing draft never blocks the sweep.)
 10. Post the AI Triage Jira comment
 
 ### Ticket disposition
@@ -210,7 +210,7 @@ File the run summary via the n8n workflow under `_runs/triage-board/RUN-{date}-b
 
 ## Hard rules
 
-- NEVER send emails. The Copilot only creates drafts (Jira comment, SharePoint .docx, and a native Outlook draft when `outlook_create_draft` is available); the lawyer sends from Outlook (see `/triage` Step 9).
+- NEVER send emails. The Copilot only creates drafts (Jira comment, SharePoint .docx, and a native Outlook draft when `outlook_create_reply_draft` / `outlook_create_draft` is available); the lawyer sends from Outlook. Never call `outlook_send_mail`, `outlook_send_draft` or `outlook_forward_mail` (see `/triage` Step 9).
 - NEVER auto-close a triaged ticket. Closing is lawyer-gated via `/reply-and-close`. Only confirmed duplicates auto-close.
 - NEVER auto-edit any skill. Propose patterns, wait for human approval.
 - NEVER bypass the n8n workflow for SharePoint writes.

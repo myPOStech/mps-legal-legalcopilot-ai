@@ -87,13 +87,13 @@ Also check sender domain matches and the recent `## Case:` entries inside `legal
 
 ### 3d. Run the full triage flow on the new ticket
 
-Same as `commands/triage.md` Steps 2-10: classify with the matching legal-triage skill, Devil's advocate + business review, auto-assign + set fields, file outputs to SharePoint via the n8n workflow (`sharepoint-filer` skill), deliver the draft (Jira comment + SharePoint .docx; there is no Outlook draft tool), post the AI Triage Jira comment.
+Same as `commands/triage.md` Steps 2-10: classify with the matching legal-triage skill, Devil's advocate + business review, auto-assign + set fields, file outputs to SharePoint via the n8n workflow (`sharepoint-filer` skill), deliver the draft per `/triage` Step 9 (Jira comment + SharePoint .docx + an Outlook reply draft in the original thread via the tool with suffix `outlook_create_reply_draft`, using the `Source-Message-Id`), post the AI Triage Jira comment.
 
 If the n8n workflow fails for this ticket, capture the error and continue to the next email -- the new Jira ticket stays in To-Do for manual re-triage with `/triage <KEY>`. Do NOT post the AI Triage comment for that ticket.
 
 ### 3e. Read-state (do not attempt)
 
-There is no mail-write tool: the Copilot cannot mark the email read or apply an Outlook category. Do not try. The audit trail lives in Jira (`Source-Message-Id` in the description) and the memory file (3f).
+Do not mark the email read, move it, or apply an Outlook category, even though the connector exposes label tools: the lawyer's inbox state is theirs. The audit trail lives in Jira (`Source-Message-Id` in the description) and the memory file (3f).
 
 ### 3f. Log the processed message
 
