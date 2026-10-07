@@ -2,7 +2,7 @@
 
 AI triage and drafting assistant for the myPOS Legal team.
 
-You give it a Jira ticket, an email, or point it at the board. It classifies the request, checks for duplicates, drafts a response in myPOS legal house style, runs a Devil's advocate review on the draft, files attachments to SharePoint via the team's n8n workflow, creates an Outlook draft for the lawyer to review, and updates Jira. It learns from lawyer feedback and gets better over time.
+You give it a Jira ticket, an email, or point it at the board. It classifies the request, checks for duplicates, drafts a response in myPOS legal house style, runs a Devil's advocate review on the draft, files attachments to SharePoint via the team's n8n workflow, puts the draft in the lawyer's Outlook Drafts folder when the Microsoft 365 connector allows it (and always in the Jira comment and a SharePoint .docx), and updates Jira. It never sends: the lawyer does. It learns from lawyer feedback and gets better over time.
 
 Runs entirely inside **Claude Code** -- no backend, no API keys, no server to maintain. SharePoint writes are routed through the team's n8n `Legal Copilot` workflow because the Microsoft 365 MCP cannot reliably write to SharePoint.
 
@@ -19,7 +19,7 @@ Download the desktop app from [claude.ai/download](https://claude.ai/download) a
 Open Claude Code and run, in this exact order:
 
 ```
-/plugin marketplace add myPOStech/mps-legal-legalcopilot-ai
+/plugin marketplace add myPOStech/mypos-legal-marketplace-main
 /plugin install mypos-legal-copilot@mypos-legal
 ```
 
@@ -59,17 +59,17 @@ You should only need to do this once on each machine you install on.
 /triage LEGAL-4321
 ```
 
-Claude reads the ticket, classifies it, runs the matching legal-triage skill, drafts a response, has Devil's advocate review the draft, files documents to SharePoint via n8n, creates a draft reply in your Outlook AI Drafts folder, and posts the triage summary as a Jira comment. **The ticket does not move to Done unless the lawyer approves.**
+Claude reads the ticket, classifies it, runs the matching legal-triage skill, drafts a response, has Devil's advocate review the draft, files documents to SharePoint via n8n, creates a draft reply in your Outlook Drafts folder when the connector allows it (the draft is always in the Jira comment and the SharePoint .docx too), and posts the triage summary as a Jira comment. **The ticket does not move to Done unless the lawyer approves.**
 
 ### Review and send
 
-After you've reviewed the AI draft in Outlook (and edited it if needed):
+Review the AI draft (in your Outlook Drafts folder, the AI Triage Jira comment or the SharePoint .docx), edit it, and **send it yourself from Outlook**. The Copilot never sends. Then run:
 
 ```
 /reply-and-close LEGAL-4321
 ```
 
-Sends your reviewed reply, transitions the ticket to Done, files the final email + any new documents to SharePoint via n8n, and appends a close-out entry (with any captured lawyer edits) to the shared memory file.
+Finds the reply you sent (Sent Items), files it + any new documents to SharePoint via n8n, appends a close-out entry (with your edits captured as lawyer feedback) to the shared memory file, and transitions the ticket to Done.
 
 ### File documents to the right SharePoint folder
 
@@ -85,7 +85,7 @@ Picks up Jira attachments + the latest draft and files them under `myPOS Legal/{
 /triage-inbox
 ```
 
-Scans your unread emails, dedupes against existing Jira tickets, creates new tickets for new matters, drafts replies in AI Drafts, and files everything to SharePoint via n8n.
+Scans recent emails in the legal inbox (skipping ones already processed), dedupes against existing Jira tickets, creates new tickets for new matters, drafts replies (Outlook Drafts when available), and files everything to SharePoint via n8n.
 
 ### Sweep the whole board
 
@@ -112,7 +112,7 @@ Args (optional): `last_7_days`, `last_30_days` (default), `this_quarter`, or an 
 The Copilot routes every SharePoint write through the team's n8n workflow `Legal Copilot` (workflow ID `VAKq9Bra0RA0SdCO`, webhook `https://myposai.app.n8n.cloud/webhook/legal-copilot-filing`). The workflow:
 
 1. Creates the case folder `myPOS Legal/{matter-folder}/{TICKET-KEY}/`
-2. Uploads each document (draft `.docx`, attachments, sent `.eml`, comment threads) into that folder
+2. Uploads each document (draft `.docx`, attachments, sent email (rendered `.html`), comment threads) into that folder
 3. Downloads the shared memory file, appends a new `## Case: {TICKET-KEY}` block with timestamp + filed documents + the caller's notes, and re-uploads it
 4. Returns a JSON summary with the SharePoint URL of every uploaded file
 
@@ -124,7 +124,7 @@ https://mypos0.sharepoint.com/sites/legal/Shared Documents/myPOS Legal/
   │   └── LEGAL-4321/
   │       ├── LEGAL-4321_AcmeCorp_2026-04-27_v1.docx     ← draft + embedded review comments
   │       ├── LEGAL-4321_AcmeCorp_2026-04-27_attachment_NDA-Acme.pdf
-  │       └── LEGAL-4321_AcmeCorp_2026-04-27_final.eml
+  │       └── LEGAL-4321_AcmeCorp_2026-04-27_final.html
   ├── Contract Reviews/
   ├── Regulatory Questions/
   ├── Corporate Changes/
@@ -142,7 +142,7 @@ https://mypos0.sharepoint.com/sites/legal/Shared Documents/myPOS Legal/
 
 ```
 LEGAL-4321_AcmeCorp_2026-04-27_v1.docx        ← original draft (Devil's advocate review embedded as Word comments)
-LEGAL-4321_AcmeCorp_2026-04-27_final.eml      ← the email actually sent
+LEGAL-4321_AcmeCorp_2026-04-27_final.html      ← the email actually sent
 ```
 
 The Devil's advocate review is embedded directly inside the draft `.docx` as anchored Word comments -- one comment per finding, plus a verdict summary comment on the document title. All triage outputs are filed as `.docx`; nothing is saved as `.md` (except the shared memory file, which is markdown by design).
@@ -165,7 +165,7 @@ You can change folder names by editing one file in the plugin: `knowledge/sharep
 
 ## Safety rails (hard rules, never overridden)
 
-- **Never sends emails** -- only creates drafts in your Outlook AI Drafts folder
+- **Never sends emails** -- drafts only (Jira comment, SharePoint .docx, and your Outlook Drafts folder when available); the lawyer always sends
 - **Never closes a risk-flagged ticket** -- regulator, inspection, claim, or tight-deadline tickets always require a lawyer to approve before close
 - **Never auto-edits its own rules** -- when it spots a recurring lawyer correction, it proposes a change and waits for sign-off
 - **Never invents facts** -- if information is missing, it asks
