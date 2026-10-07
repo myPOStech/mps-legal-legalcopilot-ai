@@ -2,6 +2,18 @@
 
 All notable changes to the myPOS Legal Copilot plugin.
 
+## [0.4.7] - 2026-10-07
+
+Routing change.
+
+### Changed
+- **`project` matter type now routes to Atanas Rusenov first.** In `knowledge/team-routing.md` the primary owner for `project` moved from Nikolay Saragerov to Atanas Rusenov; Nikolay Saragerov is now the secondary. Severity override, capacity rule and senior-reviewer fallback are unchanged. The SharePoint `_knowledge/KNOWLEDGE-SEEDS/team-routing.md` live copy was updated to match.
+
+### Plugin version
+- Bumped to **0.4.7**.
+
+---
+
 ## [0.4.6] - 2026-07-27
 
 Applied from the weekly usage review. Corrects the Outlook draft tool name and aligns the filing input contract.
