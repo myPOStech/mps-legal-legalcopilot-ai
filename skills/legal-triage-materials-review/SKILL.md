@@ -1,6 +1,6 @@
 ---
 name: legal-triage-materials-review
-description: STUB reference to the published `legal-triage-materials-review` skill. Triage requests to review external-facing material before publication -- marketing copy, ads, website content, brochures, press releases, event materials, social media, sales decks, product documentation, promotional materials. Flags regulatory compliance, misleading claims, financial promotion rules, IP, and brand/legal sign-off concerns.
+description: DO NOT INVOKE. Pointer stub with no playbook. Always use the published skill `anthropic-skills:legal-triage-materials-review` instead.
 ---
 
 # legal-triage-materials-review (stub reference)
