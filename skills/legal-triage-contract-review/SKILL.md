@@ -1,6 +1,6 @@
 ---
 name: legal-triage-contract-review
-description: STUB reference to the published `legal-triage-contract-review` skill. Triage and structure incoming contract review requests (MSAs, SOWs, SaaS agreements, vendor contracts, supplier agreements, partnership agreements, similar commercial documents). Extracts metadata, flags risk areas, identifies missing info, and produces structured output for Jira field mapping and Ironclad routing.
+description: DO NOT INVOKE. Pointer stub with no playbook. Always use the published skill `anthropic-skills:legal-triage-contract-review` instead.
 ---
 
 # legal-triage-contract-review (stub reference)
