@@ -25,7 +25,7 @@ To deactivate a lawyer (vacation, leaving): set `Active = no`. The router will s
 
 ## Expertise map
 
-Confirmed by the head of legal on 2026-06-02.
+Confirmed by the head of legal on 2026-06-02. Updated 2026-10-07: `project` primary changed from Nikolay Saragerov to Atanas Rusenov (Nikolay is now the secondary).
 
 Each lawyer's full areas of expertise:
 
@@ -44,7 +44,7 @@ Routing by matter type. **Primary** is tried first; **secondaries** are tried in
 | contract_review | Denitsa Dimitrova | Ivan Troyanov, Nikolay Saragerov, Atanas Rusenov, Daniela Chavdarova |
 | regulatory_question | Ivan Troyanov | Atanas Rusenov, Daniela Chavdarova |
 | corporate_change | Ivan Troyanov | Atanas Rusenov |
-| project | Nikolay Saragerov | Atanas Rusenov |
+| project | Atanas Rusenov | Nikolay Saragerov |
 | kyc | Denitsa Dimitrova | Jay Manjdadria |
 | gtcs | Ivan Troyanov | Daniela Chavdarova, Nikolay Saragerov |
 | materials_review | Nikolay Saragerov | Atanas Rusenov |
