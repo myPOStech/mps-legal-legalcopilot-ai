@@ -126,11 +126,18 @@ For each file in the input list:
 
 2. **comments** -- render the Jira comment thread as a `.docx` (one heading per comment, author + timestamp as a sub-heading, body as paragraphs). Never `.md`.
 
-3. **final_email** -- locate the sent message via `outlook_email_search` (folder `Sent Items`), then `read_resource` for the full content. Render headers (from/to/cc/date/subject) plus the body as a single `.html` file, `mime_type: text/html`. Raw `.eml` MIME is NOT retrievable through the connector -- do not pretend otherwise.
+3. **final_email** -- locate the sent message via `outlook_email_search` (folder `Sent Items`), then `read_resource` for the full content. Render headers (from/to/cc/date/subject) plus the body as a single `.html` string and send it in `text_documents` (`{filename, content_text, mime_type: "text/html"}`), no base64 needed. Raw `.eml` MIME is NOT retrievable through the connector -- do not pretend otherwise.
 
-4. **attachment** -- download from the source (Jira attachment URL via the Atlassian MCP fetch tool).
+4. **attachment** -- do NOT download and inline it. Put every Jira attachment in `documents_from_jira` as `{filename, jira_attachment_url, mime_type}`; the workflow fetches the bytes server-side with its own Jira credential. This removes the attachment size problem entirely.
 
-5. Read the resulting bytes from disk, base64-encode, and pair with the IANA `mime_type`.
+5. For the draft and comments `.docx`: read the resulting bytes from disk, base64-encode, and pair with the IANA `mime_type` in `documents`.
+
+6. **Validate every `.docx` before encoding.** In the sandbox run:
+   ```bash
+   python3 -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); assert 'word/document.xml' in z.namelist(); assert z.testzip() is None; print('ok')" "{path}"
+   ```
+   If it fails, rebuild the file once. If it fails again, return `success: false`, `error: "docx_invalid"`. Never upload a `.docx` that fails this check (corrupt drafts were filed with status `success` on 4 Sep 2026, executions 13321/13322, and 24 Sep 2026, executions 14897/14905/14914). The workflow also rejects any `.docx` without a ZIP header (HTTP 422), but catch it here first.
+   If no sandbox shell is available (seen 15 Sep 2026), do NOT hand-assemble base64 for a `.docx`. File the draft as `text_documents` with filename `..._v{N}.md`, `mime_type: text/markdown`, and say so in `chat_summary`.
 
 > The real document bytes MUST go into `content_base64`. Substituting a `.txt` "receipt" describing the document is a hard violation of the rules below -- see "Hard rules" at the bottom of this file.
 
@@ -164,7 +171,7 @@ If `memory_notes` is empty and `triage_metadata` is empty, the body is just `Fil
 
 Use the n8n MCP `execute_workflow` tool. **This is the ONLY transport.** Do NOT fall back to `curl` against the webhook -- the sandbox egress proxy blocks it (403 on CONNECT, observed 2026-06-02); the curl path can never work from a Cowork session. If the n8n MCP is unavailable in the session, return `success: false` with `error: "n8n_mcp_unavailable"` and stop.
 
-**Payload shape (the ONLY shape the workflow accepts):**
+**Payload shape.** Allowed body keys: `case_id`, `case_folder`, `documents`, `text_documents`, `documents_from_jira`, `memory_instructions`. Max 10 documents in total per call; each base64 document max ~8 MB.
 
 ```json
 {
@@ -186,6 +193,20 @@ Use the n8n MCP `execute_workflow` tool. **This is the ONLY transport.** Do NOT 
           "mime_type": "application/pdf"
         }
       ],
+      "text_documents": [
+        {
+          "filename": "LEGAL-4321_AcmeCorp_2026-04-27_final.html",
+          "content_text": "<html>...</html>",
+          "mime_type": "text/html"
+        }
+      ],
+      "documents_from_jira": [
+        {
+          "filename": "LEGAL-4321_AcmeCorp_2026-04-27_attachment_NDA-Acme.pdf",
+          "jira_attachment_url": "https://myposgroup.atlassian.net/rest/api/3/attachment/content/12345",
+          "mime_type": "application/pdf"
+        }
+      ],
       "memory_instructions": "**Matter type:** NDA\n**Priority:** Medium | **SLA:** 5d\n..."
     }
   }
@@ -204,7 +225,7 @@ execute_workflow(
 
 Wait for the response. Production runs respond synchronously through the workflow's `Respond to Webhook` node.
 
-> **Planned 0.5.0:** the workflow will additionally accept `documents_from_jira: [{filename, jira_attachment_url, mime_type}]` (n8n fetches attachment bytes server-side) and `text_documents: [{filename, content_text, mime_type}]` (no base64 needed). Until that ships, large attachments that cannot be inlined must produce `success: false` / `document_too_large_to_inline` -- not a receipt stub.
+> `text_documents` and `documents_from_jira` are live (workflow `Resume State` node, verified 2 Oct 2026). Prefer `documents_from_jira` for every Jira attachment; inline base64 only for files Claude builds (the draft and comments `.docx`). The PDF in the `documents` example above is illustrative only.
 
 ### Known-good caller pattern
 
@@ -271,7 +292,7 @@ Build the skill's return object from this:
 }
 ```
 
-If the workflow returns `success: false` OR HTTP non-200, surface the full error in `chat_summary` and return `success: false`. The caller MUST NOT proceed to "post triage comment to Jira" or "transition to Done" if `success: false`.
+If the workflow returns `success: false` OR HTTP non-200 (HTTP 422 with `{success:false, error}` means the workflow rejected the payload in validation: missing/invalid `case_folder`, invalid `.docx`, too many documents), surface the full error in `chat_summary` and return `success: false`. The caller MUST NOT proceed to "post triage comment to Jira" or "transition to Done" if `success: false`.
 
 ---
 
@@ -289,7 +310,8 @@ The caller pipes `chat_summary` straight into:
 - **NEVER use curl/bash against the webhook.** Sandbox egress blocks it (403). The n8n MCP `execute_workflow` tool is the only transport; if it is unavailable, return `success: false` with `error: "n8n_mcp_unavailable"`.
 - **NEVER substitute a `.txt` "receipt" for the actual document.** If the caller is tempted to upload a small text file describing what the real document is (because inlining ~40 KB+ of base64 feels awkward) -- STOP. That defeats the entire purpose of the workflow. The lawyer never re-runs `/file-to-sharepoint` manually; the case folder ends up with a receipt and no real draft.
 - **If `content_base64` for the real document cannot be assembled inside one tool call**, the skill MUST return `success: false` with `error: "document_too_large_to_inline"` and surface the issue in `chat_summary`. The caller (`/triage`, `/triage-board`, `/triage-inbox`) MUST then halt -- DO NOT post the AI Triage Jira comment as if the filing succeeded. A failed filing with a clear error is better than a "successful" filing of a receipt stub.
-- **NEVER send `file_manifest`, `payload_path`, `documents_from_url`, or any other payload shape that is not the literal `documents: [{filename, content_base64, mime_type}]` array.** The workflow rejects everything else with `Document item missing filename or content_base64` (see execution 6727 on 2026-05-27 -- failed because the caller sent `file_manifest` + `payload_path` instead of inlining).
+- **Allowed body keys only: `case_id`, `case_folder`, `documents`, `text_documents`, `documents_from_jira`, `memory_instructions`.** Never send `file_manifest`, `payload_path`, `documents_from_url` or any other shape; the workflow rejects them (execution 6727 on 2026-05-27).
+- **NEVER upload a `.docx` that fails the Step 3 zip check.** A corrupt draft filed as "success" is worse than a failed filing.
 - **`memory_instructions` is a markdown STRING, never a JSON object.**
 - **`case_folder` MUST be the matter-type folder name only** (e.g., `Regulatory Questions`, `Claims`, `NDAs`) -- NOT `Regulatory Questions/LEGAL-5261`. The workflow concatenates `case_id` itself; passing the case id twice produces an ugly `.../Claims/LEGAL-4912/LEGAL-4912/...` path (see execution 6727).
 - **Memory file path is `myPOS Legal/...`, not `myPOS Legal 1/...`** -- confirmed by the live workflow's `Prepare State` node. The `myPOS Legal 1/` copy is the old private path (reachable only by the workflow owner); never read or cite it. Any documentation referencing the old private path is stale.
