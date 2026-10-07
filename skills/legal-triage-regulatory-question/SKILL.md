@@ -1,6 +1,6 @@
 ---
 name: legal-triage-regulatory-question
-description: STUB reference to the published `legal-triage-regulatory-question` skill. Triage requests asking Legal for guidance on a regulatory requirement, rule, or obligation -- or where a regulatory authority has sent a question or information request to myPOS. Identifies regulation/jurisdiction, classifies question type, assesses urgency, flags escalation needs, and produces structured Jira output.
+description: DO NOT INVOKE. Pointer stub with no playbook. Always use the published skill `anthropic-skills:legal-triage-regulatory-question` instead.
 ---
 
 # legal-triage-regulatory-question (stub reference)
