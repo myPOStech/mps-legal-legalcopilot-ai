@@ -82,7 +82,7 @@ Scan recent `## Case:` entries inside `legal_copilot_memory.md` for >90% similar
 
 ## Step 4: Classify using the matching legal-triage skill
 
-Pick exactly one of the 10 published legal-triage skills based on the matter (mapping table unchanged from prior version -- see `commands/triage-board.md` Phase 3 for the full table).
+Pick exactly one of the 10 published legal-triage skills based on the matter and invoke it by its FULL published name, `anthropic-skills:legal-triage-{type}` (nda, contract-review, regulatory-question, corporate-change, project, kyc, gtcs, materials-review, claims, inspection-support). The `mypos-legal-copilot:legal-triage-*` entries in the skill list are pointer stubs with no playbook: never invoke them. If the loaded text says "STUB", retry with the `anthropic-skills:` prefix; if that also fails, set `human_review_required = true` and note the missing skill.
 
 The chosen skill produces structured output: matter type, priority, SLA, jurisdiction, risk flags, missing-info questions, recommended action, draft response.
 
@@ -95,7 +95,7 @@ The chosen skill produces structured output: matter type, priority, SLA, jurisdi
 
 ## Step 5: Devil's advocate review (review pass 1 of 2)
 
-Pass the draft from Step 4 to the `triage-reviewer` subagent. The subagent runs the `devils-advocate-review` skill and returns `verdict`, `summary`, `findings`, optional `revised_draft`.
+Pass the draft from Step 4 to the `triage-reviewer` subagent. The subagent runs the published `anthropic-skills:devils-advocate` skill (never the plugin's `devils-advocate-review` stub) and returns `verdict`, `summary`, `findings`, optional `revised_draft`.
 
 If verdict = `revise`: apply the suggested edits, re-run review. Cap at 2 revision passes; if still `revise`, set `human_review_required = true` and pass the latest draft into Step 6.
 
@@ -187,7 +187,7 @@ Invoke `sharepoint-filer` with the business reviewer's `final_draft`, all Jira a
 - One anchored comment per business reviewer additional finding.
 - A verdict summary comment on the document title that includes BOTH the Devil's advocate verdict and the business reviewer verdict.
 
-The filer base64-encodes the `.docx` (and every Jira attachment) and inlines them in the workflow's `documents` field. **Do NOT pass a `file_manifest`, `payload_path`, or `documents_from_url` shape -- the workflow only accepts the literal `documents: [{filename, content_base64, mime_type}]` array.** Do NOT substitute a `.txt` "receipt" for the real document if base64-inlining feels awkward; the workflow will accept it and "succeed", but the case folder ends up with a receipt and no draft -- this is the failure mode we are trying to eliminate.
+The filer validates and base64-encodes the draft `.docx` into the workflow's `documents` field, and passes every Jira attachment by URL in `documents_from_jira` (n8n fetches them server-side). **Allowed body keys: `case_id`, `case_folder`, `documents`, `text_documents`, `documents_from_jira`, `memory_instructions`. Never pass `file_manifest`, `payload_path` or `documents_from_url`.** Do NOT substitute a `.txt` "receipt" for the real document if base64-inlining feels awkward; the workflow will accept it and "succeed", but the case folder ends up with a receipt and no draft -- this is the failure mode we are trying to eliminate.
 
 **On `success: false` -- HALT.** Surface the workflow error verbatim to the user. DO NOT proceed to Step 9 (draft delivery) or Step 10 (Jira AI Triage comment). A failed filing with a clear error is better than a "successful" filing of a stub that points the lawyer at an empty SharePoint folder. The lawyer can re-run `/file-to-sharepoint LEGAL-XXXX` once the underlying issue is resolved.
 
@@ -199,12 +199,18 @@ Draft delivery has three surfaces, in order of preference:
 
 1. The full draft ALWAYS goes into the "Draft Response" section of the AI Triage Jira comment (Step 10). That comment is the lawyer's primary review surface, and the guaranteed fallback.
 2. The annotated `.docx` filed to SharePoint in Step 8 is the editable copy.
-3. Native Outlook draft (best effort). Match a draft-creation tool by SUFFIX, not by a hard-coded name: look for a tool whose suffix is `outlook_create_draft` (observed working on LEGAL-5438, 15 Jul 2026). If present, call it with:
+3. Native Outlook draft (best effort). Match draft-creation tools by SUFFIX, not by a hard-coded name. In order:
+   - If the request arrived by email and you have the original Outlook message id (`Source-Message-Id` in the ticket description, or the pasted email), use the tool whose suffix is `outlook_create_reply_draft` so the draft stays in the thread.
+   - Otherwise use the tool whose suffix is `outlook_create_draft` (observed working on LEGAL-5438, 15 Jul 2026).
+   Subject: `[AI DRAFT {ticket_key}] Re: {ticket summary}`. Body: the business reviewer `final_draft` as HTML, first line `AI DRAFT - lawyer review required before sending`. Recipients: the original requester only; never add external parties. Example (new message):
    ```json
-   {"subject": "Re: {ticket summary}", "body": "{final_draft as HTML with a DRAFT banner}", "bodyType": "html"}
+   {"subject": "[AI DRAFT {ticket_key}] Re: {ticket summary}", "body": "{final_draft as HTML with the AI DRAFT banner}", "bodyType": "html", "to": ["{requester email}"]}
    ```
-   Include the returned `webLink` in Steps 10 and 11. The draft lands in the lawyer's own Outlook Drafts folder; it is never sent. If no draft tool is present under any prefix this session, skip silently -- the Jira comment and SharePoint `.docx` are sufficient. Do NOT invent a tool name.
-4. If the connector draft tool is absent but the n8n `legal-copilot-draft` workflow is deployed (check once per session with the n8n `search_workflows` tool), call it via `execute_workflow` with `{"ticket_key": "{key}", "subject": "Re: {ticket summary}", "body_html": "{final_draft as HTML}"}` and include the returned `webLink`. If neither exists, the draft lives in the Jira comment -- designed behaviour, no warning needed.
+   Include the returned draft id / `webLink` in Steps 10 and 11. The draft lands in the lawyer's own Outlook Drafts folder; it is never sent.
+4. n8n fallback. If neither draft tool is present under any prefix, or the call fails with an auth / connection error (the connector was invalidated on 2 Oct 2026), call the n8n `search_workflows` tool once per session with query `Legal Copilot Draft`. If it returns workflow `zMZJM8RvzluqLIrl` with `active: true`, call it via `execute_workflow` with `{"ticket_key": "{key}", "subject": "[AI DRAFT {key}] Re: {ticket summary}", "body_html": "{final_draft as HTML}", "to": ["{requester email}"]}` and include the returned `webLink`. If the workflow is missing or inactive, skip it.
+5. Neither route worked: continue. Record `Outlook draft: not created ({reason})` in Steps 10 and 11. Do NOT halt the triage for a missing Outlook draft; the Jira comment and SharePoint `.docx` are sufficient.
+
+Never call any tool whose suffix is `outlook_send_mail`, `outlook_send_draft` or `outlook_forward_mail`. Creating a draft is allowed; sending is not.
 
 ---
 
@@ -262,7 +268,7 @@ Triage complete for {ticket_key}:
   Devil's advocate: {da_verdict} | Business reviewer: {br_verdict}{if override: ' (override)'}
   Filed: {sharepoint_folder_url}
   Memory: {memory_file_url}
-  Outlook draft: {webLink | "n/a -- draft is in the Jira comment"}
+  Outlook draft: {webLink | "not created ({reason}) -- draft is in the Jira comment"}
   Jira comment posted; fields set: priority, due, labels, flag.
   {if human_review_required: "Lawyer review required before /reply-and-close"}
 ```
@@ -271,8 +277,8 @@ Triage complete for {ticket_key}:
 
 ## Hard rules
 
-- NEVER send emails. The Copilot only creates drafts; the lawyer reviews and sends from Outlook. The draft lives in the Jira comment, the SharePoint .docx, and (when a draft tool is available) the lawyer's Outlook Drafts folder.
-- Match Microsoft 365 tools by SUFFIX. The connected connector exposes `outlook_create_draft` (create-draft) and `outlook_email_search` (read); it does NOT expose a tool named `outlook_email_create_draft`. Never invent a tool name; if a needed suffix is absent this session, follow the step's documented fallback.
+- NEVER send emails (`outlook_send_mail`, `outlook_send_draft`, `outlook_forward_mail` are forbidden even though the connector exposes them). The Copilot only creates drafts; the lawyer reviews and sends from Outlook. The draft lives in the Jira comment, the SharePoint .docx, and (when a draft tool is available) the lawyer's Outlook Drafts folder.
+- Match Microsoft 365 tools by SUFFIX. The connected connector exposes `outlook_create_draft` and `outlook_create_reply_draft` (create-draft) and `outlook_email_search` (read); it does NOT expose a tool named `outlook_email_create_draft`. Never invent a tool name; if a needed suffix is absent this session, follow the step's documented fallback.
 - NEVER move the ticket to Done. That's `/reply-and-close`'s job.
 - NEVER post priority, due date, deadline, flag, or assignee as a Jira comment. Use the fields.
 - NEVER skip the business reviewer pass. Three opinions, every time.

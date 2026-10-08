@@ -1,6 +1,6 @@
 ---
 name: devils-advocate-review
-description: STUB -- references the published Devil's advocate review skill. This stub exists so the plugin can ship without bundling the skill body. The actual skill body is published in the `anthropic-skills` plugin (or wherever the team has published it). Use this skill via the `triage-reviewer` subagent which loads the published version.
+description: DO NOT INVOKE. Pointer stub with no playbook. Always use the published skill `anthropic-skills:devils-advocate` instead.
 ---
 
 # Devil's advocate review (stub reference)
@@ -9,7 +9,7 @@ This file is a placeholder. The plugin does NOT bundle the Devil's advocate skil
 
 ## How this works
 
-When `/triage` calls the `triage-reviewer` subagent (`agents/triage-reviewer.md`), that subagent calls `Skill(skill: "devils-advocate-review")` which Claude Code resolves to the published skill regardless of which plugin published it. The plugin user must have access to that skill in their environment.
+When `/triage` calls the `triage-reviewer` subagent (`agents/triage-reviewer.md`), that subagent calls `Skill(skill: "anthropic-skills:devils-advocate")` directly. Calling `devils-advocate-review` does NOT reach the published skill: inside this plugin the name resolves to this stub (found in the 25 Sep and 2 Oct 2026 usage reviews). The plugin user must have `anthropic-skills:devils-advocate` available.
 
 ## To replace this stub with a bundled copy
 

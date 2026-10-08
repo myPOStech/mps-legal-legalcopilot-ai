@@ -21,7 +21,7 @@ The calling command passes:
 
 ## What you do
 
-1. **Load the Devil's advocate skill.** Call `Skill(skill: "devils-advocate-review")`. If it doesn't resolve, return `verdict: "escalate"` with `findings: [{severity: "blocker", issue: "Devil's advocate skill not available -- cannot review."}]`.
+1. **Load the Devil's advocate skill.** Call `Skill(skill: "anthropic-skills:devils-advocate")`. If that name does not resolve, try `Skill(skill: "devils-advocate")`. Never use `devils-advocate-review`: inside this plugin that name resolves to the bundled placeholder stub, not the real playbook. If the loaded text contains "STUB", "stub reference" or "placeholder", treat it as not resolved. If no real skill resolves, return `verdict: "escalate"` with `findings: [{severity: "blocker", issue: "Devil's advocate skill not available, cannot review."}]` and say which names you tried.
 
 2. **Run the review.** Pass the draft, matter type, triage metadata, and applicable patterns. The Devil's advocate skill produces line-level findings.
 

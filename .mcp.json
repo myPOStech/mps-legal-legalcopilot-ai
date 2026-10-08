@@ -10,7 +10,7 @@
     },
     "n8n": {
       "type": "http",
-      "url": "https://myposai.app.n8n.cloud/mcp"
+      "url": "https://myposai.app.n8n.cloud/mcp-server/http"
     }
   }
 }

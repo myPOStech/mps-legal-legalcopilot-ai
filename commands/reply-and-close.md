@@ -5,9 +5,9 @@ argument-hint: <TICKET-KEY> [--dry-run]
 
 # /reply-and-close
 
-**The Copilot cannot send email and cannot create Outlook drafts -- no such tools exist in the Microsoft 365 connector.** The flow is therefore lawyer-sends-first:
+**The Copilot never sends email.** `/triage` may have left an AI draft in the lawyer's Outlook Drafts folder (subject starts `[AI DRAFT {ticket_key}]`), but sending is always the lawyer's act. The flow is therefore lawyer-sends-first:
 
-1. The lawyer reviews the AI draft (in the ticket's AI Triage comment or the SharePoint .docx), edits it, and **sends the reply themselves from Outlook**.
+1. The lawyer reviews the AI draft (Outlook draft, the ticket's AI Triage comment, or the SharePoint .docx), edits it, and **sends the reply themselves from Outlook**.
 2. This command then: verifies the sent email exists, diffs it against the AI draft, files the sent email + any new documents to SharePoint via the n8n workflow, appends a feedback entry to the shared memory file, and transitions the Jira ticket to Done.
 
 ## Constants
@@ -105,8 +105,8 @@ Invoke the `sharepoint-filer` skill (n8n-backed) with:
 
 - `ticket_key`, `ticket_summary`, `matter_type` (from the AI Triage comment)
 - `files`:
-  - The sent email, role `final_email`. Raw MIME is not retrievable through the connector, so render what `read_resource` returned (headers: from/to/cc/date/subject, then the body) as a single `.html` file, base64-encode it, `mime_type: text/html`. Name it `{TICKET-KEY}_{tag}_{YYYY-MM-DD}_final.html`.
-  - Any new attachments since `/triage` ran (skip ones already listed in the case folder -- check via `sharepoint_search` scoped to the case folder name).
+  - The sent email, role `final_email`. Raw MIME is not retrievable through the connector, so render what `read_resource` returned (headers: from/to/cc/date/subject, then the body) as a single `.html` string and pass it in `text_documents` (`content_text`, `mime_type: text/html`); no base64 needed. Name it `{TICKET-KEY}_{tag}_{YYYY-MM-DD}_final.html`.
+  - Any new Jira attachments since `/triage` ran, passed by URL in `documents_from_jira` (skip ones already listed in the case folder -- check via `sharepoint_search` scoped to the case folder name).
 - `memory_notes` -- a brief markdown block:
   - That the ticket was closed, the recipient list, the sent timestamp
   - Whether material edits were captured (and the category if so)
@@ -177,8 +177,8 @@ Filed and closed {ticket_key}:
 
 ## Hard rules
 
-- NEVER send email. The Copilot has no send tool; only the lawyer sends. This command verifies and files what was sent.
-- NEVER attempt `outlook_email_send` or `outlook_email_create_draft` -- these tools do not exist in this environment.
+- NEVER send email. Only the lawyer sends. This command verifies and files what was sent.
+- NEVER call any tool whose suffix is `outlook_send_mail`, `outlook_send_draft` or `outlook_forward_mail`, even though the connector exposes them.
 - NEVER file or close without explicit `y` confirmation in Step 5 (unless `--dry-run`, which changes nothing).
 - NEVER close a `human_review_required` or risk-flagged ticket without the lawyer's `approved for send` / `risk reviewed` Jira comment.
 - ALWAYS file the final email to SharePoint via the n8n workflow BEFORE transitioning to Done. On `success: false`, do not transition.

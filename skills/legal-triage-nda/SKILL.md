@@ -1,6 +1,6 @@
 ---
 name: legal-triage-nda
-description: STUB reference to the published `legal-triage-nda` skill. Triage and structure incoming NDA requests -- extracts NDA fields, flags missing info, assesses priority/SLA, surfaces risk flags, and produces structured output ready for Jira field mapping and Ironclad routing. Trigger when input mentions NDA, non-disclosure agreement, confidentiality agreement, or CDA.
+description: DO NOT INVOKE. Pointer stub with no playbook. Always use the published skill `anthropic-skills:legal-triage-nda` instead.
 ---
 
 # legal-triage-nda (stub reference)
