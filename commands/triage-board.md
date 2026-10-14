@@ -12,7 +12,7 @@ Process every To-Do ticket on the legal board: dedupe, classify, draft, three-pa
 ## Constants
 
 - Atlassian Cloud ID: `fb47470f-f5c2-44bc-8182-f2a22f059adb`
-- Default JQL: `project in (LEGAL, AIRD) AND status = "To Do" ORDER BY created ASC`
+- Default JQL: `project = LEGAL AND status = "To Do" ORDER BY created ASC`
 - n8n workflow ID: `VAKq9Bra0RA0SdCO`
 - Shared memory file: `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md` (**the shared Legal team library -- an old private copy exists under `myPOS Legal 1/` and must never be read**)
 - Team routing config: `${CLAUDE_PLUGIN_ROOT}/knowledge/team-routing.md`
@@ -47,7 +47,7 @@ Plus the bundled seeds in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
 
 ### 1b. Detect lawyer corrections
 
-JQL: `project in (LEGAL, AIRD) AND status = Done AND resolved >= -7d ORDER BY resolved DESC` with `fields: ["summary", "assignee", "resolutiondate"]`. For each closed ticket with an "AI Triage" comment, diff the AI draft against the sent reply. Each `/reply-and-close` run should have appended a `### Lawyer feedback` block to the memory file -- if a recent close-out is missing it, list the omission in Phase 6.
+JQL: `project = LEGAL AND status = Done AND resolved >= -7d ORDER BY resolved DESC` with `fields: ["summary", "assignee", "resolutiondate"]`. For each closed ticket with an "AI Triage" comment, diff the AI draft against the sent reply. Each `/reply-and-close` run should have appended a `### Lawyer feedback` block to the memory file -- if a recent close-out is missing it, list the omission in Phase 6.
 
 ### 1c. Detect patterns
 
@@ -61,7 +61,7 @@ JQL: `project in (LEGAL, AIRD) AND status = Done AND resolved >= -7d ORDER BY re
 
 ### 2a. Find candidates
 
-JQL: `project in (LEGAL, AIRD) AND status = "To Do" AND updated >= -7d`
+JQL: `project = LEGAL AND status = "To Do" AND updated >= -7d`
 
 For each ticket, call `mcp__atlassian__getJiraIssue` with `fields: ["comment", "assignee", "summary", "status"]` and `responseContentFormat: markdown`.
 
@@ -99,7 +99,7 @@ Record the moved tickets in the Phase 6 summary under `Last-replier reassigned a
 
 ## Phase 3: Scan and process
 
-JQL: `project in (LEGAL, AIRD) AND status = "To Do" ORDER BY created ASC` (compact fields only -- see Phase 0)
+JQL: `project = LEGAL AND status = "To Do" ORDER BY created ASC` (compact fields only -- see Phase 0)
 
 Exclude any tickets handled in Phase 2.
 
@@ -137,7 +137,7 @@ The board sweep never auto-closes a triaged ticket. Closing is always lawyer-gat
 ## Phase 4: SLA watchdog
 
 ```
-JQL: project in (LEGAL, AIRD) AND statusCategory != Done ORDER BY created ASC
+JQL: project = LEGAL AND statusCategory != Done ORDER BY created ASC
 ```
 
 (compact fields only)
@@ -160,7 +160,7 @@ This ticket was created {N} days ago. SLA for {priority} priority is {sla_days} 
 ## Phase 5: Overdue check (lightweight)
 
 ```
-JQL: project in (LEGAL, AIRD) AND duedate < now() AND statusCategory != Done
+JQL: project = LEGAL AND duedate < now() AND statusCategory != Done
 ```
 
 Count overdue tickets per assignee. If any assignee has >= 3 overdue tickets, surface in Phase 6 under `Overload signals`. Do NOT post per-ticket Jira comments here; the productivity report (`/legal-report`) is the long-form view.

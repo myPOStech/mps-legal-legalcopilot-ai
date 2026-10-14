@@ -19,7 +19,7 @@ This skill is **on demand only**. It is not scheduled. The lawyer runs `/legal-r
 ### 1a. Overdue tickets
 
 ```
-JQL: project in (LEGAL, AIRD) AND duedate < now() AND statusCategory != Done ORDER BY duedate ASC
+JQL: project = LEGAL AND duedate < now() AND statusCategory != Done ORDER BY duedate ASC
 ```
 
 Fields: `summary`, `assignee`, `duedate`, `priority`, `labels`, `created`, `status`. Maximum 100 results.
@@ -32,7 +32,7 @@ For each overdue ticket compute:
 ### 1b. Closed-in-range tickets per lawyer
 
 ```
-JQL: project in (LEGAL, AIRD) AND resolved >= "{range_start}" AND assignee is not EMPTY ORDER BY resolved DESC
+JQL: project = LEGAL AND resolved >= "{range_start}" AND assignee is not EMPTY ORDER BY resolved DESC
 ```
 
 For each lawyer in the roster (from `knowledge/team-routing.md`), count:
@@ -46,7 +46,7 @@ For each lawyer in the roster (from `knowledge/team-routing.md`), count:
 ### 1c. Recent transitions (a productivity proxy)
 
 ```
-JQL: project in (LEGAL, AIRD) AND status changed during ("{range_start}", "{range_end}") ORDER BY updated DESC
+JQL: project = LEGAL AND status changed during ("{range_start}", "{range_end}") ORDER BY updated DESC
 ```
 
 For each lawyer, count distinct tickets where they triggered a transition. This catches work that doesn't end in Done (e.g., bouncing a ticket to Blocked, asking for clarification) but is still real work.

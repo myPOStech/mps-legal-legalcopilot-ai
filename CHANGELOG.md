@@ -2,6 +2,20 @@
 
 All notable changes to the myPOS Legal Copilot plugin.
 
+## [0.4.9] - 2026-10-13
+
+AIRD project removed from scope.
+
+### Changed
+- **The Copilot now watches the `LEGAL` Jira project only.** Every JQL that used `project in (LEGAL, AIRD)` now uses `project = LEGAL`: `/triage-board` (board scan, last-replier reconciliation, lawyer-corrections check, SLA watchdog, overdue check), `/triage` and `/triage-inbox` dedupe searches, `jira-auto-assign` capacity check, and the three `legal-productivity-report` queries. AIRD tickets are AI/R&D product work, not legal matters, and were taking the oldest slots under the 3-per-sweep triage cap.
+- `/triage-inbox` always creates new tickets in `LEGAL` (the AIRD option is gone).
+- `knowledge/config.md`, `/triage`, `/legal-report` and `docs/pilot-runbook.md` list `LEGAL` as the only watched project.
+
+### Plugin version
+- Bumped to **0.4.9**. Run `/plugin update` so scheduled runs pick it up.
+
+---
+
 ## [0.4.8] - 2026-10-07
 
 Applied from the weekly usage review of 2 Oct 2026 (FIX-01 to FIX-06).

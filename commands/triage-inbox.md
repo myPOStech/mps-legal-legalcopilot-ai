@@ -1,6 +1,6 @@
 ---
 description: Sweep recent emails in the legal inbox -- create Jira tickets for new matters and triage them. Files outputs to SharePoint via n8n.
-argument-hint: [mailbox] [count] [filter]
+argument-hint: "[mailbox] [count] [filter]"
 ---
 
 # /triage-inbox
@@ -62,7 +62,7 @@ If no candidate emails remain after dedupe, print "Inbox clear -- nothing new to
 ### 3b. Dedupe against Jira
 
 ```
-JQL: project in (LEGAL, AIRD) AND statusCategory != Done AND summary ~ "{normalised subject}"
+JQL: project = LEGAL AND statusCategory != Done AND summary ~ "{normalised subject}"
 ```
 
 Also check sender domain matches and the recent `## Case:` entries inside `legal_copilot_memory.md` for >90% similar closed tickets.
@@ -79,7 +79,7 @@ Also check sender domain matches and the recent `## Case:` entries inside `legal
 ### 3c. Create Jira ticket
 
 `mcp__atlassian__createJiraIssue`:
-- project: `LEGAL` (default) or `AIRD` (only if email is clearly an AI/data-rights matter)
+- project: `LEGAL`
 - summary: the email subject (stripped)
 - description: the email body, with sender + date header AND the Outlook message ID on the last line (`Source-Message-Id: {id}`)
 - issue type: Task

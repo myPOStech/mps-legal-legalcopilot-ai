@@ -12,7 +12,7 @@ This is a **runbook** — follow it top-to-bottom, tick the boxes, and report ba
 
 Tick each box before moving to Step 1. If any are missing, stop and resolve them before installing — half the install problems come from missing prerequisites.
 
-- [ ] You can log in to **Jira** at `myposgroup.atlassian.net` and you can read tickets in the `LEGAL` and `AIRD` projects.
+- [ ] You can log in to **Jira** at `myposgroup.atlassian.net` and you can read tickets in the `LEGAL` project.
 - [ ] You can log in to **Outlook** with your myPOS account and you can send mail (i.e., your account isn't locked or in a "view only" state).
 - [ ] You have **read** access to the [shared Legal SharePoint folder](https://mypos0.sharepoint.com/sites/legal). Open the link and confirm you can see the `myPOS Legal/` directory and the 10 matter-type folders (NDAs, Contract Reviews, Regulatory Questions, ...). You do NOT need write access — the n8n workflow's service account writes for you.
 - [ ] You have a **Windows or Mac laptop** with internet access.

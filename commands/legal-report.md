@@ -1,6 +1,7 @@
 ---
 description: Generate an on-demand legal team productivity and overdue-tickets report. Pulls from Jira, prompts for off-Jira hours per lawyer, files a .docx to SharePoint.
-argument-hint: [last_7_days | last_30_days | this_quarter | YYYY-MM-DD..YYYY-MM-DD]
+argument-hint:
+- last_7_days | last_30_days | this_quarter | YYYY-MM-DD..YYYY-MM-DD
 ---
 
 # /legal-report
@@ -10,7 +11,7 @@ Generate a report of overdue tickets and team productivity over a date range. De
 ## Constants
 
 - Atlassian Cloud ID: `fb47470f-f5c2-44bc-8182-f2a22f059adb`
-- Projects watched: `LEGAL`, `AIRD`
+- Projects watched: `LEGAL`
 - Default range: last 30 calendar days
 - n8n filing workflow ID: `VAKq9Bra0RA0SdCO`
 - Report folder: `myPOS Legal/Reports/Productivity/`

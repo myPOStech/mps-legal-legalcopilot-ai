@@ -79,7 +79,7 @@ Otherwise `severity = "normal"`.
 For the candidate, run JQL via `mcp__atlassian__searchJiraIssuesUsingJql`:
 
 ```
-project in (LEGAL, AIRD) AND assignee = "{candidate.account_id}" AND statusCategory != Done
+project = LEGAL AND assignee = "{candidate.account_id}" AND statusCategory != Done
 ```
 
 Use `fields: ["summary"]` and `maxResults: 50` (enough to count, we don't need the bodies).

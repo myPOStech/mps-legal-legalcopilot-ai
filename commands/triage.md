@@ -10,7 +10,7 @@ Triage a single legal request end-to-end. The ticket does **not** move to Done -
 ## Constants
 
 - Atlassian Cloud ID: `fb47470f-f5c2-44bc-8182-f2a22f059adb`
-- Projects watched: `LEGAL`, `AIRD`
+- Projects watched: `LEGAL`
 - n8n filing workflow ID: `VAKq9Bra0RA0SdCO`
 - Shared memory file: `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`
 - Team routing config: `${CLAUDE_PLUGIN_ROOT}/knowledge/team-routing.md`
@@ -20,7 +20,7 @@ Triage a single legal request end-to-end. The ticket does **not** move to Done -
 ## Input
 
 `$ARGUMENTS` is one of:
-- A Jira ticket key (e.g., `LEGAL-4321`, `AIRD-44`)
+- A Jira ticket key (e.g., `LEGAL-4321`)
 - A Jira URL (extract the issue key from the path)
 - Raw email content (subject + body + sender)
 
@@ -64,7 +64,7 @@ Plus the bundled seed knowledge in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
 JQL search for open near-duplicates:
 
 ```
-project in (LEGAL, AIRD) AND statusCategory != Done AND summary ~ "{key terms}"
+project = LEGAL AND statusCategory != Done AND summary ~ "{key terms}"
 ```
 
 Scan recent `## Case:` entries inside `legal_copilot_memory.md` for >90% similarity too.

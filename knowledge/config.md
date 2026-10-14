@@ -5,9 +5,9 @@ What the team has configured for the Legal Copilot. This file ships with the plu
 ## Jira board
 
 - **Cloud ID:** `fb47470f-f5c2-44bc-8182-f2a22f059adb`
-- **Projects watched:** `LEGAL`, `AIRD`
+- **Projects watched:** `LEGAL`
 - **To-Do status:** `To Do`
-- **Default JQL:** `project in (LEGAL, AIRD) AND status = "To Do" ORDER BY created ASC`
+- **Default JQL:** `project = LEGAL AND status = "To Do" ORDER BY created ASC`
 
 ## SharePoint
 
