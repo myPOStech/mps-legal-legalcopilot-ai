@@ -42,6 +42,8 @@ Plus the bundled seeds in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
 - `feedback-log.md`
 - `sharepoint-map.md`
 - `team-routing.md` (consumed by `jira-auto-assign`)
+- `sla-policy.md` and `two-touch-rule.md` (applied in `/triage` Step 4b)
+- `config.md` (intake form URLs)
 
 **Fallbacks (in order):** SharePoint memory read fails -> seeds only, surface a warning. Bundled seeds unreadable (app-internal path; common in scheduled runs) -> fetch them from the SharePoint `_knowledge` folder with the same search + read pattern. Missing there too -> conservative defaults, flag in Phase 6.
 
@@ -110,7 +112,7 @@ For each remaining To-Do ticket (max 3 per sweep), follow `/triage`'s Steps 2-10
 1. Fetch ticket (one at a time, compact format)
 2. Dedupe
 3. Classify with the matching legal-triage skill, invoked by its full published name `anthropic-skills:legal-triage-{type}` (never the `mypos-legal-copilot:` stub; see `/triage` Step 4); the Devil's advocate pass uses `anthropic-skills:devils-advocate`
-4. Apply risk gates
+4. Apply risk gates, then set the SLA and pick a resolution path (`/triage` Step 4b: `sla-policy.md` + `two-touch-rule.md`)
 5. Devil's advocate review (`triage-reviewer` subagent)
 6. Business reviewer (`business-reviewer` subagent)
 7. Auto-assign (`jira-auto-assign`) + set fields (`jira-fields-and-flags`)
@@ -142,12 +144,12 @@ JQL: project = LEGAL AND statusCategory != Done ORDER BY created ASC
 
 (compact fields only)
 
-For each open ticket, compare `now() - created` against the SLA. If >75% elapsed AND no lawyer response since the AI triage comment AND no SLA Warning already posted for the current SLA window, post:
+For each open ticket with a `duedate`, the SLA window is `duedate - created` (this already reflects `knowledge/sla-policy.md`, the external-deadline rule and any manual change by a lawyer). Skip tickets with no `duedate`. Read the tier from the ticket's `sla:{tier}` label (`unknown` if absent). If >75% of the window has elapsed AND no lawyer response since the AI triage comment AND no SLA Warning already posted for the current SLA window, post:
 
 ```markdown
 **SLA Warning**
 
-This ticket was created {N} days ago. SLA for {priority} priority is {sla_days} days.
+This ticket was created {N} days ago. SLA tier {sla_tier}: due {duedate} ({window_days}-day window).
 {remaining_days} day(s) remaining before SLA breach.
 
 *Please review the AI draft in the AI Triage comment above (and the SharePoint case folder), then run `/reply-and-close` or escalate.*

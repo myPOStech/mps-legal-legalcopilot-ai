@@ -77,6 +77,17 @@ Compare the sent body against the AI draft from Step 1:
 
 ---
 
+## Step 4b: Count touches with the requester
+
+Count the **touches** on this matter (definition in `knowledge/two-touch-rule.md`: a message from Legal to the requester that delivers the answer or asks them for something; acknowledgements and Copilot-only Jira comments do not count):
+
+- Sent emails to the requester since the ticket was created: `outlook_email_search` on `Sent Items` (and the shared legal mailbox if (b) in Step 2) with the ticket key or summary keywords, `afterDateTime` = the ticket's `created` date. Count each distinct message once, including the reply found in Step 3.
+- Jira comments by legal-team members (roster in `knowledge/team-routing.md`) that ask the requester something or give them the answer.
+
+Read `two_touch_eligible` from the ticket's `path:*` label (`path:full_track` = not eligible; no `path:*` label = triaged before 0.5.0, treat as not eligible). Record `touches = N`. If the ticket is eligible and `N > 2`, set `two_touch_breached = true` and note in one line why (e.g. "requester sent the contract only after the second ask"). The lawyer can correct the count in Step 5.
+
+---
+
 ## Step 5: Confirm before filing and closing
 
 Show the lawyer:
@@ -89,8 +100,9 @@ To: {recipient list}
 Body preview: {first 300 chars}
 New documents to file: {count}
 Material edits vs AI draft: {yes/no}
+Touches with requester: {N}{if two_touch_eligible: " (two-touch ticket" + (if two_touch_breached: ", BREACHED: " + reason) + ")"}
 
-Confirm? (y / n / show-full-body)
+Confirm? (y / n / show-full-body / touches=<N> to correct the count)
 ```
 
 If `--dry-run`, print the above and stop. Otherwise wait for explicit `y`.
@@ -110,6 +122,7 @@ Invoke the `sharepoint-filer` skill (n8n-backed) with:
 - `memory_notes` -- a brief markdown block:
   - That the ticket was closed, the recipient list, the sent timestamp
   - Whether material edits were captured (and the category if so)
+  - `touches: {N}`, and if `two_touch_breached`, `two_touch_breached: {reason}` (the board sweep's pattern detection reads these)
   - The `### Lawyer feedback` block from Step 7 if edits were material
 - `triage_metadata` -- passed through from the AI Triage comment
 
@@ -155,6 +168,8 @@ Memory file: [legal_copilot_memory.md]({memory_file_url})
 *Closed by Legal Copilot via n8n workflow VAKq9Bra0RA0SdCO.*
 ```
 
+Then set the touch labels: read the current labels, merge in `touches:{N}` (plus `two-touch-breached` when `two_touch_breached`), and write them back with one `mcp__atlassian__editJiraIssue` call. Never drop existing labels.
+
 Then transition to Done:
 1. `mcp__atlassian__getTransitionsForJiraIssue` to find the Done transition ID.
 2. `mcp__atlassian__transitionJiraIssue` to apply it.
@@ -168,6 +183,7 @@ Then transition to Done:
 Filed and closed {ticket_key}:
   Sent by lawyer: {timestamp} to {recipient list}
   Filed to SharePoint: {sharepoint_folder_url}  (final email + {N} new attachments)
+  Touches with requester: {touches}{if two_touch_breached: " -- two-touch target missed (" + reason + ")"}
   Memory file updated: {memory_file_url}
   Jira: transitioned to Done
   {if edits captured: "Lawyer edits captured ({category}) -- will improve future drafts after the next /triage-board run"}

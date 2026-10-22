@@ -2,6 +2,34 @@
 
 All notable changes to the myPOS Legal Copilot plugin.
 
+## [0.5.0] - 2026-10-22
+
+Longer, risk-based SLAs; a two-interaction target for non-critical tickets; intake form beta (spec only).
+
+### Added
+- **`knowledge/sla-policy.md`** -- one SLA policy for every triage. Tiers: `critical` 1 day, `high` 7 days, `standard` (non-critical) 14 days, `project-pressing` 90 days, `project-standard` 180 days, all in calendar days, with a separate first-response target per tier. A hard external deadline pulls the due date earlier (2 business days before it; 10 for projects). The legal-triage skills' own SLA suggestions (4h / 24h / 3 / 5 business days) are no longer used for due dates.
+- **`knowledge/two-touch-rule.md`** -- non-critical tickets (`standard`, and `high` without a critical flag) should close in at most 2 interactions with the requester. Each triage picks a resolution path (`answer_now`, `answer_on_assumptions`, `one_question_round`, `full_track`), asks at most 3 blocking questions, and turns the rest into stated assumptions. Critical tickets, projects, claims and inspections are exempt.
+- **`docs/n8n-intake-form.md`** -- spec for the `Legal Intake` n8n workflow (contract review + regulatory question forms). Not built yet; form URLs in `knowledge/config.md` are `TBD`, so the Copilot never sends a link until they are filled in.
+- `/triage` Step 4b: applies the SLA policy and the two-touch rule after classification. The AI Triage comment now shows the SLA tier, first-response target, resolution path, the questions asked and what was assumed.
+- `/triage` Step 2 reads `Intake-Form:` tickets as given facts.
+
+### Changed
+- `jira-fields-and-flags`: `sla_days` range 1-200 (was 1-90); adds `sla:{tier}` and `path:{resolution_path}` labels; keeps a due date that is already on the ticket.
+- `jira-auto-assign`: `sla_days` range 1-200.
+- `triage-reviewer` (Devil's advocate): on two-touch tickets, gaps become assumptions or caveats, not new questions.
+- `business-reviewer`: fourth axis "interaction budget"; fixes over-long question lists itself and returns `revise` if the draft still needs more than 3 questions or a multi-step path.
+- `/triage-board` Phase 4 SLA watchdog: SLA window is now `duedate - created`, tier read from the `sla:*` label.
+- `/reply-and-close`: counts touches with the requester, labels `touches:{N}` and `two-touch-breached`.
+- `/legal-report`: reports the two-touch rate by matter type and the intake form share.
+
+### Not in this release
+- The published `anthropic-skills:legal-triage-*` skills still print their old SLA suggestion, and `legal-triage-project` still defines SLA as time to the scoping call. They are outside this repo; the policy file overrides them for due dates.
+
+### Plugin version
+- Bumped to **0.5.0**. Run `/plugin update`, and copy `sla-policy.md`, `two-touch-rule.md` and `config.md` to the SharePoint `_knowledge` folder so scheduled runs that cannot read the plugin folder pick them up.
+
+---
+
 ## [0.4.9] - 2026-10-13
 
 AIRD project removed from scope.

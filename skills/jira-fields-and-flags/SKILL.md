@@ -14,19 +14,25 @@ Push deadlines, priority, labels and impediment flags into the Jira ticket itsel
 {
   "ticket_key": "LEGAL-4321",
   "priority": "Highest" | "High" | "Medium" | "Low" | "Lowest",
-  "sla_days": 1-90,
+  "sla_days": 1-200,
   "matter_type": "nda" | "contract_review" | ...,
   "risk_flags": ["regulator", "claim", "tight_deadline", "inspection"],
   "human_review_required": true | false,
-  "today_iso": "2026-06-02"
+  "today_iso": "2026-06-02",
+  "sla_tier": "critical" | "high" | "standard" | "project-pressing" | "project-standard",
+  "resolution_path": "answer_now" | "answer_on_assumptions" | "one_question_round" | "full_track"
 }
 ```
+
+`sla_days` comes from `knowledge/sla-policy.md` (applied by the caller in `/triage` Step 4b), never from the legal-triage skill's own SLA suggestion. Projects run up to 180 days, hence the 200 cap.
 
 ## Step 1: Compute the due date
 
 `due_date = today_iso + sla_days calendar days` formatted `YYYY-MM-DD`.
 
 If the resulting date falls on Saturday or Sunday, roll back to the previous Friday -- internal deadlines should land on workdays so they trigger morning sweeps.
+
+**Keep a due date that is already there.** Read the current `duedate` together with the labels (Step 2). If the ticket already has one, a requester or lawyer set it (or an earlier triage did): do not overwrite it. Leave `duedate` out of the Step 4 edit and return `due_date_kept: true` with the date the policy would have set as `policy_due_date`.
 
 ## Step 2: Compute labels
 
@@ -36,8 +42,10 @@ Build a stable, alphabetically sorted label set:
 - `auto-triaged-{today_iso}` (e.g., `auto-triaged-2026-06-02`)
 - For each risk flag: `risk:{flag}` (e.g., `risk:regulator`, `risk:claim`)
 - If `human_review_required`: add `needs-lawyer-review`
+- `sla:{sla_tier}` (e.g., `sla:standard`, `sla:project-standard`) -- read by the `/triage-board` SLA watchdog
+- `path:{resolution_path}` (e.g., `path:answer_on_assumptions`) -- read by `/reply-and-close` and `/legal-report` for the two-touch metric
 
-Never replace existing labels. Always merge: read the current label set via `mcp__atlassian__getJiraIssue` (`fields: ["labels"]`) and combine.
+Never replace existing labels. Always merge: read the current label set via `mcp__atlassian__getJiraIssue` (`fields: ["labels", "duedate"]`) and combine. If the ticket already carries an `sla:*` or `path:*` label from an earlier triage, replace that one label rather than adding a second.
 
 ## Step 3: Compute the flag field
 
@@ -85,8 +93,10 @@ If the edit returns an error mentioning an unknown field, peel off that field an
 {
   "applied": true,
   "priority": "High",
-  "due_date": "2026-06-09",
-  "labels_added": ["matter:nda", "auto-triaged-2026-06-02", "risk:claim"],
+  "due_date": "2026-06-03",
+  "due_date_kept": false,
+  "policy_due_date": "2026-06-03",
+  "labels_added": ["matter:nda", "auto-triaged-2026-06-02", "risk:claim", "sla:critical", "path:full_track"],
   "flagged": true,
   "fields_skipped": []
 }
@@ -95,7 +105,7 @@ If the edit returns an error mentioning an unknown field, peel off that field an
 The calling command surfaces these in the AI Triage comment under "Fields set" -- not as a duplicate of what's already on the ticket, but as a one-line confirmation:
 
 ```
-Fields set: priority=High, due=2026-06-09, flagged=yes, labels=[matter:nda, risk:claim, ...]
+Fields set: priority=High, due=2026-06-03{if due_date_kept: " (existing date kept; policy would set " + policy_due_date + ")"}, flagged=yes, labels=[matter:nda, risk:claim, ...]
 ```
 
 ---
@@ -104,6 +114,7 @@ Fields set: priority=High, due=2026-06-09, flagged=yes, labels=[matter:nda, risk
 
 - NEVER set priority via a comment. The priority field exists -- use it.
 - NEVER set deadlines via a comment. The duedate field exists -- use it.
-- NEVER blow away existing labels. Always merge.
+- NEVER blow away existing labels. Always merge. The only label the skill replaces is its own `sla:*` / `path:*` label from an earlier triage of the same ticket.
+- NEVER overwrite a `duedate` that is already on the ticket (Step 1).
 - NEVER set a duedate in the past. If sla_days computes to a past date (clock skew, retroactive triage of an old ticket), set duedate to today_iso instead and add the label `sla-already-elapsed`.
 - NEVER turn the Flagged field on without a real reason. Spurious flags train the team to ignore them.

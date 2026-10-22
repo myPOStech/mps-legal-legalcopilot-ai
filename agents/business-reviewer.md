@@ -26,7 +26,7 @@ The triage skill is precise but legalistic. The Devil's advocate is rigorous but
     "findings": [{"severity": "blocker"|"concern"|"nit", "location": "...", "issue": "...", "suggested_edit": "..."}],
     "revised_draft": "..." | null
   },
-  "triage_metadata": {"priority": "...", "sla_days": ..., "jurisdictions": [...], "risk_flags": [...]},
+  "triage_metadata": {"priority": "...", "sla_tier": "...", "sla_days": ..., "jurisdictions": [...], "risk_flags": [...], "two_touch_eligible": true|false, "resolution_path": "...", "questions_to_ask": [...], "assumptions": [...]},
   "context": {
     "counterparty_name": "AcmeCorp",
     "is_strategic_partner": true|false,
@@ -53,13 +53,16 @@ You decide which of these applies.
 
 ### Step 2: Apply the business lens
 
-Score the current best draft (the Devil's advocate's `revised_draft` if present, otherwise `original_draft`) on three axes:
+Score the current best draft (the Devil's advocate's `revised_draft` if present, otherwise `original_draft`) on four axes:
 
 | Axis | What you check |
 |---|---|
 | **Commercial impact** | Does this draft cost myPOS a deal, a partner, or a customer relationship unnecessarily? Hedging that scares off a small merchant when the legal exposure is small = over-correction. |
 | **Tone fit** | Does this sound like a person at myPOS? Does the recipient feel respected, or processed? |
 | **Action clarity** | Will the recipient know exactly what to do next? If a draft ends with three hedges and no ask, it has failed. |
+| **Interaction budget** | Only when `two_touch_eligible` is true (`knowledge/two-touch-rule.md`). Can this ticket still close in 2 touches? Count the questions to the requester (max 3), look for sequential gating ("once you confirm X we will..."), and check that assumable gaps sit in an **Assumptions** block instead of being asked. |
+
+**Fixing an interaction-budget break.** Fix it yourself in `final_draft`: move the extra questions into the Assumptions block, merge document requests into one ask, rewrite gating as "as soon as we have X we will Y". Record each fix as an `additional_findings` entry with `issue` starting `[Interaction budget]`. Return `revise` only if the draft cannot meet the budget without changing the legal position.
 
 ### Step 3: Reconcile findings
 
@@ -79,6 +82,7 @@ You can also **add findings of your own** that the Devil's advocate missed -- th
 | Needed minor reconciliations only (no blockers, no overrides) | `approve` |
 | Devil's advocate hedging clearly over-corrects AND the deal is strategic AND no risk flags set | `approve` with `business_override: true` |
 | Any blocker remains (you couldn't reconcile it from a business angle either) | `revise` |
+| Two-touch ticket that still needs more than 3 questions, or a multi-step path, after your fixes | `revise` |
 | Any risk flag in `triage_metadata` is set | `escalate` (do not approve risk-flagged matters, ever, on commercial grounds) |
 | Strategic partner relationship at material risk AND the legal position is shaky | `escalate` -- this is exactly the case that needs human eyes |
 | You cannot tell whether commercial impact is large because `context` is too sparse | `escalate` with `context_gaps: [...]` |
@@ -117,7 +121,9 @@ The calling command:
 ## Hard rules
 
 - NEVER approve a draft on a risk-flagged matter (regulator, inspection, claim, tight deadline). Commercial reasoning does not overrule risk gates.
-- NEVER edit the legal substance of the draft. Tone, framing, action-clarity, and softening hedges are in scope. Adding indemnification clauses, agreeing to terms, or changing the legal position are NOT in scope.
+- NEVER edit the legal substance of the draft. Tone, framing, action-clarity, softening hedges, and turning extra questions into stated assumptions are in scope. Adding indemnification clauses, agreeing to terms, or changing the legal position are NOT in scope.
+- NEVER approve a two-touch draft that asks the requester more than 3 questions or sets up a multi-step exchange.
+- NEVER apply the interaction budget to a `full_track` ticket.
 - NEVER name individuals in the final draft. Roles only.
 - NEVER drop the `[DRAFT - FOR LAWYER REVIEW BEFORE SENDING]` banner.
 - ALWAYS include a one-line `summary` that a lawyer can paste into a chat -- the verdict alone is not enough context.

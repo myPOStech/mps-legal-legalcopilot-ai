@@ -51,6 +51,17 @@ JQL: project = LEGAL AND status changed during ("{range_start}", "{range_end}") 
 
 For each lawyer, count distinct tickets where they triggered a transition. This catches work that doesn't end in Done (e.g., bouncing a ticket to Blocked, asking for clarification) but is still real work.
 
+### 1d. Two-touch rate and intake form use
+
+From the 1b result set (add `labels` to the fields), using the labels set by `jira-fields-and-flags` and `/reply-and-close` (see `knowledge/two-touch-rule.md`):
+
+- `eligible` = closed tickets with a `path:*` label other than `path:full_track`
+- `within_two` = eligible tickets with `touches:1` or `touches:2`
+- `two_touch_rate = within_two / max(1, eligible)`, overall and per `matter:*` label
+- `breached` = eligible tickets labelled `two-touch-breached` (list the keys)
+- `no_touch_count` = eligible tickets with no `touches:*` label (closed without `/reply-and-close`; report the count, do not guess)
+- `form_share` = share of closed `contract_review` / `regulatory_question` tickets labelled `intake:form`, and their two-touch rate compared with the same matter types without the label (the intake-form beta signal)
+
 ## Step 2: Prompt for off-Jira hours
 
 For each active lawyer in `team-routing.md`, ask the chat user (presumed to be the head of legal or whoever is running the report):
@@ -100,6 +111,8 @@ Sections (in this order):
    - Tickets closed this window: N
    - Median time to close: N days
    - Unassigned tickets: N (call this out separately -- it is a routing bug)
+   - Closed within 2 touches: X% of N eligible tickets (from 1d), with the weakest matter type
+   - Intake form (beta): X% of contract / regulatory tickets came through the form; two-touch rate with form vs without
 3. **Per-lawyer table.** One row each, columns: Name | Open | In Progress | Overdue | Closed (range) | Median TTC | Off-Jira hours | Status. Status is the composite from Step 3 (excluding UNDER-UTILISED).
 4. **Overdue tickets list.** Grouped by assignee. For each ticket: key, summary, days overdue, original priority. Up to 30 entries; if more, link out to the JQL.
 5. **Patterns.** One paragraph each:
@@ -148,6 +161,7 @@ Status:
   OK: {everyone else}
 
 Unassigned tickets needing routing: {N}
+Closed within 2 touches: {X}% of {eligible} eligible ({breached} breached)
 
 Filed: {sharepoint_url_of_docx}
 Memory updated: {memory_file_url}

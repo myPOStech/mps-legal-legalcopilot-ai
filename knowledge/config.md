@@ -29,3 +29,17 @@ All SharePoint writes are routed through the team's n8n `Legal Copilot` workflow
 - **What it does:** creates `myPOS Legal/{case_folder}/{case_id}/`, uploads each document, downloads + appends + re-uploads the memory file, returns a JSON summary
 
 The Microsoft 365 MCP is still used for SharePoint **reads** (the read path i
+
+## SLA policy and two-touch rule
+
+- **SLA tiers and due dates:** `knowledge/sla-policy.md` (single source; the legal-triage skills' own SLA suggestions are not used for due dates)
+- **Two-touch rule and resolution paths:** `knowledge/two-touch-rule.md`
+
+## Intake forms (beta)
+
+Spec: `docs/n8n-intake-form.md`. `/triage` only sends a form link when the URL below is not `TBD`.
+
+- **Contract review form URL:** `TBD`
+- **Regulatory question form URL:** `TBD`
+- **n8n workflow name:** `Legal Intake` (not built yet)
+- **Labels on form tickets:** `intake:form`, `intake:contract-review-v1` / `intake:regulatory-question-v1`

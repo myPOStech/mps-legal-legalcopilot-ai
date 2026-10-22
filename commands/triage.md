@@ -41,10 +41,14 @@ Plus the bundled seed knowledge in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
 - `patterns.md` -- learned rules from lawyer feedback
 - `feedback-log.md` -- correction history (seed)
 - `team-routing.md` -- assignment rules (read by the auto-assign skill in Step 7)
+- `sla-policy.md` -- SLA tiers and due-date rules (Step 4b)
+- `two-touch-rule.md` -- resolution paths and the 3-question cap (Step 4b)
+- `config.md` -- intake form URLs (section "Intake forms (beta)")
 
 **Fallbacks (in order):**
 - SharePoint memory read fails -> continue with the seeds and surface a one-line warning.
-- `${CLAUDE_PLUGIN_ROOT}/knowledge/` unreadable (app-internal path; common in scheduled runs) -> fetch `team-routing.md`, `patterns.md` and `sharepoint-map.md` from the SharePoint `_knowledge` folder with the same search + read_resource pattern.
+- `${CLAUDE_PLUGIN_ROOT}/knowledge/` unreadable (app-internal path; common in scheduled runs) -> fetch `team-routing.md`, `patterns.md`, `sharepoint-map.md`, `sla-policy.md`, `two-touch-rule.md` and `config.md` from the SharePoint `_knowledge` folder with the same search + read_resource pattern.
+- `sla-policy.md` missing everywhere -> use the `standard` tier (14 days) for every non-critical ticket and `critical` (1 day) for anything with a risk flag; flag it in the final summary.
 - Missing there too -> continue with conservative defaults, flag it in the final summary, and suggest `/setup-copilot` to seed them.
 
 ---
@@ -54,6 +58,8 @@ Plus the bundled seed knowledge in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
 **Jira key provided:** `mcp__atlassian__getJiraIssue` with `responseContentFormat: markdown`. Extract summary, description, reporter, attachments list, existing comments.
 
 **Email pasted:** use the subject, body, and sender directly.
+
+**Intake form tickets:** if the description starts with an `Intake-Form:` line (or the ticket has the `intake:form` label), it was submitted through the n8n intake form (`docs/n8n-intake-form.md`). Read the labelled fields as given facts. Do not ask the requester again for anything the form already answers; a form answer of `Not sure` counts as a gap to assume or ask about in Step 4b. If the form has a `Related-Ticket:` line, link the two tickets as "relates to".
 
 **Attachment gate:** if the ticket's substance lives in an attachment (scanned letter, PDF) and its text cannot be extracted from Jira in this session, STOP and tell the lawyer exactly which file to attach in chat. Do not classify from the summary alone.
 
@@ -84,7 +90,7 @@ Scan recent `## Case:` entries inside `legal_copilot_memory.md` for >90% similar
 
 Pick exactly one of the 10 published legal-triage skills based on the matter and invoke it by its FULL published name, `anthropic-skills:legal-triage-{type}` (nda, contract-review, regulatory-question, corporate-change, project, kyc, gtcs, materials-review, claims, inspection-support). The `mypos-legal-copilot:legal-triage-*` entries in the skill list are pointer stubs with no playbook: never invoke them. If the loaded text says "STUB", retry with the `anthropic-skills:` prefix; if that also fails, set `human_review_required = true` and note the missing skill.
 
-The chosen skill produces structured output: matter type, priority, SLA, jurisdiction, risk flags, missing-info questions, recommended action, draft response.
+The chosen skill produces structured output: matter type, priority, SLA suggestion, jurisdiction, risk flags, missing-info questions, recommended action, draft response. The skill's SLA suggestion is an urgency signal only; Step 4b sets the real SLA.
 
 **Risk gates (hard rules, never override):**
 - Any risk flag (regulator / inspection / claim / tight deadline) -> `human_review_required = true`
@@ -93,9 +99,34 @@ The chosen skill produces structured output: matter type, priority, SLA, jurisdi
 
 ---
 
+## Step 4b: Set the SLA and pick a resolution path
+
+**SLA.** Apply `knowledge/sla-policy.md` to the Step 4 output: pick the tier from priority, critical flags and matter type, then apply the external-deadline rule. Produce `sla_tier`, `sla_days`, `sla_basis`, `external_deadline` and `first_response_target`. Use this `sla_days` everywhere below, never the skill's suggestion.
+
+**Resolution path.** Apply `knowledge/two-touch-rule.md`:
+
+1. Decide whether the ticket is two-touch eligible (tier `standard`, or `high` without a critical flag; not a project, claim or inspection; no `full-track` label).
+2. Pick `resolution_path`: `answer_now`, `answer_on_assumptions`, `one_question_round`, or `full_track` (exempt tickets only).
+3. On an eligible ticket, split the skill's missing-information list into `questions_to_ask` (blocking, at most 3) and `assumptions` (everything else). Rewrite the draft so it answers on the assumptions, lists them in an **Assumptions** block, asks only `questions_to_ask` in one message, and has no sequential gating.
+4. On the `one_question_round` path for `contract_review` / `regulatory_question`, with 3+ blocking gaps and a form URL configured, the draft may send the intake form link instead of the questions.
+
+Add all of these to `triage_metadata` for Steps 5-8:
+
+```json
+{
+  "sla_tier": "...", "sla_days": N, "sla_basis": "...", "external_deadline": "YYYY-MM-DD" | null,
+  "two_touch_eligible": true | false,
+  "resolution_path": "answer_now" | "answer_on_assumptions" | "one_question_round" | "full_track",
+  "questions_to_ask": ["..."],
+  "assumptions": ["..."]
+}
+```
+
+---
+
 ## Step 5: Devil's advocate review (review pass 1 of 2)
 
-Pass the draft from Step 4 to the `triage-reviewer` subagent. The subagent runs the published `anthropic-skills:devils-advocate` skill (never the plugin's `devils-advocate-review` stub) and returns `verdict`, `summary`, `findings`, optional `revised_draft`.
+Pass the draft from Step 4b (and the `triage_metadata`, including `two_touch_eligible`, `resolution_path`, `questions_to_ask` and `assumptions`) to the `triage-reviewer` subagent. The subagent runs the published `anthropic-skills:devils-advocate` skill (never the plugin's `devils-advocate-review` stub) and returns `verdict`, `summary`, `findings`, optional `revised_draft`.
 
 If verdict = `revise`: apply the suggested edits, re-run review. Cap at 2 revision passes; if still `revise`, set `human_review_required = true` and pass the latest draft into Step 6.
 
@@ -168,7 +199,9 @@ Invoke `jira-fields-and-flags` with:
   "matter_type": "{...}",
   "risk_flags": [...],
   "human_review_required": {bool},
-  "today_iso": "{YYYY-MM-DD}"
+  "today_iso": "{YYYY-MM-DD}",
+  "sla_tier": "{from Step 4b}",
+  "resolution_path": "{from Step 4b}"
 }
 ```
 
@@ -228,11 +261,15 @@ Never call any tool whose suffix is `outlook_send_mail`, `outlook_send_draft` or
 
 **Auto-assigned to:** {assignee_name} ({rule_applied})
 **Fields set:** priority={priority}, due={due_date}, flagged={yes|no}, labels=[{labels_added}]
+**SLA tier:** {sla_tier} ({sla_basis}{if external_deadline: ", external deadline " + external_deadline}) | **First response target:** {first_response_target}
+**Resolution path:** {resolution_path}{if two_touch_eligible: " (two-touch ticket)"}
 
 {if risk flags: "**Risk flags:** {flags}"}
 {if human_review_required: "**NEEDS HUMAN REVIEW BEFORE SEND**"}
 {if similar past ticket: "**Similar past ticket:** {key} -- response adapted from previous matter"}
-{if missing info: "**Missing information:**\n{questions}"}
+{if questions_to_ask: "**Asked in the draft (max 3):**\n{questions_to_ask}"}
+{if assumptions: "**Assumed, not asked:**\n{assumptions}"}
+{if full_track and missing info: "**Missing information:**\n{questions}"}
 
 **Recommended action:** {action}
 
@@ -261,7 +298,8 @@ Note: priority, due date, assignee, and flag are NOT repeated here as bullet ite
 
 ```
 Triage complete for {ticket_key}:
-  Matter: {type} | Priority: {priority} | SLA: {sla_days}d | Due: {due_date}
+  Matter: {type} | Priority: {priority} | SLA: {sla_tier}, {sla_days}d | Due: {due_date}
+  Path: {resolution_path} | Questions asked: {count of questions_to_ask} | Assumed: {count of assumptions}
   Assigned to: {assignee_name} ({rule_applied})
   Skill: {legal-triage-skill-name}
   Risk flags: {flags or "none"}
@@ -285,6 +323,8 @@ Triage complete for {ticket_key}:
 - NEVER let `business_override: true` ride if any risk flag is set.
 - NEVER fabricate `context.is_strategic_partner` -- pass `unknown` if you do not know.
 - NEVER override risk gates.
+- NEVER use the legal-triage skill's own SLA suggestion as `sla_days`. `knowledge/sla-policy.md` sets it (Step 4b).
+- NEVER put more than 3 questions to the requester in the draft of a two-touch ticket. Everything else is an assumption (Step 4b, `knowledge/two-touch-rule.md`).
 - NEVER reassign an already-assigned ticket from /triage. That is `/triage-board`'s job.
 - NEVER re-triage a ticket whose last AI Triage comment has no human reply after it (see Step 3 re-triage cap).
 - NEVER post the AI Triage comment if the n8n filing returned `success: false`.
