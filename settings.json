@@ -33,7 +33,21 @@
       "mcp__n8n__search_workflows",
       "mcp__n8n__search_workflow_executions",
       "mcp__n8n__get_workflow_execution",
-      "mcp__n8n__get_workflow_history"
+      "mcp__n8n__get_workflow_history",
+      "mcp__Microsoft_365__outlook_create_draft",
+      "mcp__Microsoft_365__outlook_create_reply_draft",
+      "mcp__Microsoft_365__outlook_email_search",
+      "mcp__Microsoft_365__sharepoint_search",
+      "mcp__Microsoft_365__sharepoint_folder_search",
+      "mcp__Microsoft_365__read_resource",
+      "mcp__Microsoft_365__get_granted_scopes",
+      "mcp__Atlassian_MCP__searchJiraIssuesUsingJql",
+      "mcp__Atlassian_MCP__getJiraIssue",
+      "mcp__Atlassian_MCP__editJiraIssue",
+      "mcp__Atlassian_MCP__addOrEditJiraIssueComment",
+      "mcp__Atlassian_MCP__transitionJiraIssue",
+      "mcp__Atlassian_MCP__createJiraIssue",
+      "mcp__Atlassian_MCP__getAccessibleAtlassianResources"
     ]
   }
 }

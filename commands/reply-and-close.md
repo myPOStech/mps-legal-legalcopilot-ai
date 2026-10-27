@@ -118,7 +118,7 @@ Invoke the `sharepoint-filer` skill (n8n-backed) with:
 - `ticket_key`, `ticket_summary`, `matter_type` (from the AI Triage comment)
 - `files`:
   - The sent email, role `final_email`. Raw MIME is not retrievable through the connector, so render what `read_resource` returned (headers: from/to/cc/date/subject, then the body) as a single `.html` string and pass it in `text_documents` (`content_text`, `mime_type: text/html`); no base64 needed. Name it `{TICKET-KEY}_{tag}_{YYYY-MM-DD}_final.html`.
-  - Any new Jira attachments since `/triage` ran, passed by URL in `documents_from_jira` (skip ones already listed in the case folder -- check via `sharepoint_search` scoped to the case folder name).
+  - Any new Jira attachments since `/triage` ran, handled per `sharepoint-filer` Step 3 item 4: signature / inline images skipped, real attachments up to 8 MB inline in `documents`, `documents_from_jira` only above 8 MB. Skip ones already listed in the case folder (check via `sharepoint_search` scoped to the case folder name).
 - `memory_notes` -- a brief markdown block:
   - That the ticket was closed, the recipient list, the sent timestamp
   - Whether material edits were captured (and the category if so)
@@ -126,9 +126,9 @@ Invoke the `sharepoint-filer` skill (n8n-backed) with:
   - The `### Lawyer feedback` block from Step 7 if edits were material
 - `triage_metadata` -- passed through from the AI Triage comment
 
-If the workflow returns `success: false`, HALT before transitioning the ticket. Surface the error and let the lawyer retry. The audit trail must be complete on SharePoint before the ticket closes.
+If the case folder ends up with 0 files although documents were sent, say so; the filer retries once with `documents` only (`sharepoint-filer` Step 6). If the workflow still returns `success: false`, HALT before transitioning the ticket. Surface the error and let the lawyer retry. The audit trail must be complete on SharePoint before the ticket closes. An attachment listed in `attachments_not_filed` does not block the close.
 
-Capture the returned `sharepoint_folder_url`, `documents_filed[].sharepoint_url`, and `memory_file_url` for Step 8.
+Capture the returned `sharepoint_folder_url`, `documents_filed[].sharepoint_url`, `memory_file_url` and `attachments_not_filed` for Step 8.
 
 ---
 
@@ -160,6 +160,7 @@ Sent to: {recipient list} on {sent timestamp}
 Filed to SharePoint: [{matter_type}/{ticket_key}/]({sharepoint_folder_url})
 - Final email: [{final.html}]({sharepoint_url_of_final_email})
 - {N} new attachments (if any)
+{if attachments_not_filed: "- Attachments not filed: {filename} ({reason}), ..."}
 
 {if material edits: "Lawyer-edited draft -- {summary of edits} -- captured to memory file."}
 

@@ -88,7 +88,7 @@ Scan recent `## Case:` entries inside `legal_copilot_memory.md` for >90% similar
 
 ## Step 4: Classify using the matching legal-triage skill
 
-Pick exactly one of the 10 published legal-triage skills based on the matter and invoke it by its FULL published name, `anthropic-skills:legal-triage-{type}` (nda, contract-review, regulatory-question, corporate-change, project, kyc, gtcs, materials-review, claims, inspection-support). The `mypos-legal-copilot:legal-triage-*` entries in the skill list are pointer stubs with no playbook: never invoke them. If the loaded text says "STUB", retry with the `anthropic-skills:` prefix; if that also fails, set `human_review_required = true` and note the missing skill.
+Pick exactly one of the 10 published legal-triage skills based on the matter and invoke it by its FULL published name, `anthropic-skills:legal-triage-{type}` (nda, contract-review, regulatory-question, corporate-change, project, kyc, gtcs, materials-review, claims, inspection-support). The `mypos-legal-copilot:legal-triage-*` entries in the skill list are pointer stubs with no playbook: never invoke them. For NDAs use `anthropic-skills:legal-triage-nda`, never `legal:triage-nda` (the Anthropic legal plugin's generic NDA skill, which can also trigger on "NDA"). If the loaded text says "STUB", retry with the `anthropic-skills:` prefix; if that also fails, set `human_review_required = true` and note the missing skill.
 
 The chosen skill produces structured output: matter type, priority, SLA suggestion, jurisdiction, risk flags, missing-info questions, recommended action, draft response. The skill's SLA suggestion is an urgency signal only; Step 4b sets the real SLA.
 
@@ -220,7 +220,7 @@ Invoke `sharepoint-filer` with the business reviewer's `final_draft`, all Jira a
 - One anchored comment per business reviewer additional finding.
 - A verdict summary comment on the document title that includes BOTH the Devil's advocate verdict and the business reviewer verdict.
 
-The filer validates and base64-encodes the draft `.docx` into the workflow's `documents` field, and passes every Jira attachment by URL in `documents_from_jira` (n8n fetches them server-side). **Allowed body keys: `case_id`, `case_folder`, `documents`, `text_documents`, `documents_from_jira`, `memory_instructions`. Never pass `file_manifest`, `payload_path` or `documents_from_url`.** Do NOT substitute a `.txt` "receipt" for the real document if base64-inlining feels awkward; the workflow will accept it and "succeed", but the case folder ends up with a receipt and no draft -- this is the failure mode we are trying to eliminate.
+The filer validates and base64-encodes the draft `.docx` into the workflow's `documents` field. Jira attachments follow `sharepoint-filer` Step 3 item 4: signature / inline images (`image001.png` etc., or under 20 KB) are skipped, real attachments up to 8 MB go inline in `documents`, and only files over 8 MB go in `documents_from_jira` (the n8n SSRF guard usually blocks those). A failed attachment never stops the draft from being filed; the filer returns it in `attachments_not_filed`. If the case folder ends up with 0 files, the filer says so and retries once with `documents` only. **Allowed body keys: `case_id`, `case_folder`, `documents`, `text_documents`, `documents_from_jira`, `memory_instructions`. Never pass `file_manifest`, `payload_path` or `documents_from_url`.** Do NOT substitute a `.txt` "receipt" for the real document if base64-inlining feels awkward; the workflow will accept it and "succeed", but the case folder ends up with a receipt and no draft -- this is the failure mode we are trying to eliminate.
 
 **On `success: false` -- HALT.** Surface the workflow error verbatim to the user. DO NOT proceed to Step 9 (draft delivery) or Step 10 (Jira AI Triage comment). A failed filing with a clear error is better than a "successful" filing of a stub that points the lawyer at an empty SharePoint folder. The lawyer can re-run `/file-to-sharepoint LEGAL-XXXX` once the underlying issue is resolved.
 
@@ -232,16 +232,16 @@ Draft delivery has three surfaces, in order of preference:
 
 1. The full draft ALWAYS goes into the "Draft Response" section of the AI Triage Jira comment (Step 10). That comment is the lawyer's primary review surface, and the guaranteed fallback.
 2. The annotated `.docx` filed to SharePoint in Step 8 is the editable copy.
-3. Native Outlook draft (best effort). Match draft-creation tools by SUFFIX, not by a hard-coded name. In order:
-   - If the request arrived by email and you have the original Outlook message id (`Source-Message-Id` in the ticket description, or the pasted email), use the tool whose suffix is `outlook_create_reply_draft` so the draft stays in the thread.
-   - Otherwise use the tool whose suffix is `outlook_create_draft` (observed working on LEGAL-5438, 15 Jul 2026).
-   Subject: `[AI DRAFT {ticket_key}] Re: {ticket summary}`. Body: the business reviewer `final_draft` as HTML, first line `AI DRAFT - lawyer review required before sending`. Recipients: the original requester only; never add external parties. Example (new message):
+3. Native Outlook draft (best effort). Match draft-creation tools by SUFFIX, not by a hard-coded name.
+   a. **Subject** must be exactly `[AI DRAFT {ticket_key}] Re: {original subject}`, where the original subject is the request email's subject (or the ticket summary when the request did not come by email). Never create a draft without this prefix: a 14 Oct 2026 draft without it ("RE: URSSAF possible phishing") could not be traced to its ticket.
+   b. **Tool:** if you have the original Outlook message id (`Source-Message-Id` in the ticket description, or the pasted email), use the tool whose suffix is `outlook_create_reply_draft` so the draft stays in the thread; otherwise the tool whose suffix is `outlook_create_draft`. Body: the business reviewer `final_draft` as HTML, first line `AI DRAFT - lawyer review required before sending`. Recipients: the original requester only; never add external parties. Never call send tools. Example (new message):
    ```json
-   {"subject": "[AI DRAFT {ticket_key}] Re: {ticket summary}", "body": "{final_draft as HTML with the AI DRAFT banner}", "bodyType": "html", "to": ["{requester email}"]}
+   {"subject": "[AI DRAFT {ticket_key}] Re: {original subject}", "body": "{final_draft as HTML with the AI DRAFT banner}", "bodyType": "html", "to": ["{requester email}"]}
    ```
-   Include the returned draft id / `webLink` in Steps 10 and 11. The draft lands in the lawyer's own Outlook Drafts folder; it is never sent.
-4. n8n fallback. If neither draft tool is present under any prefix, or the call fails with an auth / connection error (the connector was invalidated on 2 Oct 2026), call the n8n `search_workflows` tool once per session with query `Legal Copilot Draft`. If it returns workflow `zMZJM8RvzluqLIrl` with `active: true`, call it via `execute_workflow` with `{"ticket_key": "{key}", "subject": "[AI DRAFT {key}] Re: {ticket summary}", "body_html": "{final_draft as HTML}", "to": ["{requester email}"]}` and include the returned `webLink`. If the workflow is missing or inactive, skip it.
-5. Neither route worked: continue. Record `Outlook draft: not created ({reason})` in Steps 10 and 11. Do NOT halt the triage for a missing Outlook draft; the Jira comment and SharePoint `.docx` are sufficient.
+   c. **Verify:** call the tool whose suffix is `outlook_email_search` with `folderName: "Drafts"` and query `[AI DRAFT {ticket_key}]`. No hit: retry the create once and verify again. Still no hit: go to 4.
+   d. Include the draft's `webLink` in Steps 10 and 11. The draft lands in the lawyer's own Outlook Drafts folder; it is never sent.
+4. n8n fallback, only when step 3 did not produce a verified draft. Call the n8n `search_workflows` tool once per session with query `Legal Copilot Draft`. If it returns workflow `zMZJM8RvzluqLIrl` with `active: true`, call it via `execute_workflow` with `{"ticket_key": "{key}", "subject": "[AI DRAFT {key}] Re: {original subject}", "body_html": "{final_draft as HTML}", "to": ["{requester email}"]}` and include the returned `webLink`. If the workflow is missing or inactive, skip it.
+5. **Always record one line**, in Steps 10 and 11 and in the `/triage-board` summary: `Outlook draft: created (subject [AI DRAFT {key}] Re: ...)` or `Outlook draft: NOT created, reason: {tool declined | not allowed | no draft tool | no message id | not found in Drafts after retry | error text}`. A missing draft never halts the triage (the Jira comment and SharePoint `.docx` are enough), but a missing reason line is a defect: drafts stopped appearing after 14 Oct 2026 and no run said why.
 
 Never call any tool whose suffix is `outlook_send_mail`, `outlook_send_draft` or `outlook_forward_mail`. Creating a draft is allowed; sending is not.
 
@@ -278,7 +278,9 @@ Never call any tool whose suffix is `outlook_send_mail`, `outlook_send_draft` or
 
 **Filed to SharePoint:** [{matter_type}/{ticket_key}/]({sharepoint_folder_url})
 {list of {filename -> sharepoint_url} for each filed document}
+{if attachments_not_filed: "**Attachments not filed:** {filename} ({reason}), ..."}
 **Memory file updated:** [legal_copilot_memory.md]({memory_file_url})
+**Outlook draft:** {created (subject ...) | NOT created, reason: ...}
 
 ---
 ## Draft Response (for lawyer to review, edit, and send)
@@ -306,7 +308,8 @@ Triage complete for {ticket_key}:
   Devil's advocate: {da_verdict} | Business reviewer: {br_verdict}{if override: ' (override)'}
   Filed: {sharepoint_folder_url}
   Memory: {memory_file_url}
-  Outlook draft: {webLink | "not created ({reason}) -- draft is in the Jira comment"}
+  {if attachments_not_filed: "Attachments not filed: {filename} ({reason}), ..."}
+  Outlook draft: {"created (subject [AI DRAFT {key}] Re: ...) " + webLink | "NOT created, reason: {reason} -- draft is in the Jira comment"}
   Jira comment posted; fields set: priority, due, labels, flag.
   {if human_review_required: "Lawyer review required before /reply-and-close"}
 ```

@@ -189,6 +189,10 @@ Processed (new triage): {total} (cap 3/sweep; deferred: {list})
     {list of {ticket_key, error}}
   Auto-assign failures (routing gap): {count}
     {list of {ticket_key, reason}}
+  Outlook drafts (one line per triaged ticket, see /triage Step 9):
+    {ticket_key}: Outlook draft: created (subject ...) | NOT created, reason: ...
+  Attachments not filed:
+    {list of {ticket_key, filename, reason}}
 
 Overload signals:
   {list of {assignee, overdue_count}} (>= 3 overdue tickets each)

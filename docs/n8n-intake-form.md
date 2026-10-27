@@ -1,6 +1,6 @@
-# n8n intake forms (beta) -- STUB
+# n8n intake forms (beta)
 
-**Status: not built yet.** This is the spec for the `Legal Intake` n8n workflow. Until it exists and its URLs are in `knowledge/config.md` (section "Intake forms (beta)"), the Copilot never sends a form link; `/triage` just asks its (max 3) questions.
+**Status: built as an unpublished draft (22 Oct 2026), not tested yet.** n8n workflow `Legal Intake` (`FicMGfmDaJxaXBym`), with raw submissions logged to the data table `legal_intake_submissions`. It needs a basic-auth credential ("Legal Intake form login") and a Jira Cloud credential selected before the first test. Until it is published and its URLs are in `knowledge/config.md` (section "Intake forms (beta)"), the Copilot never sends a form link; `/triage` just asks its (max 3) questions.
 
 ## Why
 

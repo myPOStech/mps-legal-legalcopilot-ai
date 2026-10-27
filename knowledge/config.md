@@ -41,5 +41,5 @@ Spec: `docs/n8n-intake-form.md`. `/triage` only sends a form link when the URL b
 
 - **Contract review form URL:** `TBD`
 - **Regulatory question form URL:** `TBD`
-- **n8n workflow name:** `Legal Intake` (not built yet)
+- **n8n workflow:** `Legal Intake` (`FicMGfmDaJxaXBym`), unpublished draft
 - **Labels on form tickets:** `intake:form`, `intake:contract-review-v1` / `intake:regulatory-question-v1`
