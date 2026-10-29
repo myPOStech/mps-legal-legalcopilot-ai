@@ -52,6 +52,8 @@ Existing-Ticket-Given: {text the requester typed, or "none"; "(not found)" appen
 
 An unanswered optional field is written as `Not sure`, never left out, so `/triage` can tell "not asked" from "unknown".
 
+**"Other" follow-ups.** n8n forms cannot show a field only when "Other" is picked, so every dropdown that offers Other is followed by an always-visible optional text box ("If you chose Other: ..."). The Build nodes append that text to the chosen value on the same block line, so `/triage` reads one line: `Contract type: Other - franchise agreement`, `Our role: Other - licensor`, `myPOS entity signing: Other / not sure - probably the Dutch entity`. When the contract type is Other, the ticket summary uses the free text instead of the word "Other".
+
 ## Fields
 
 ### Contract review (`contract-review v1`)
@@ -59,10 +61,13 @@ An unanswered optional field is written as `Not sure`, never left out, so `/tria
 | Field | Type | Required |
 |---|---|---|
 | Your name, your myPOS email, your team | text | yes |
-| myPOS entity signing | dropdown (myPOS AD, myPOS Limited, myPOS Payments Ltd, other / not sure) | yes |
+| myPOS entity signing | dropdown: the group entity list below, then "Other / not sure" | yes |
+| If you chose Other / not sure: which entity, or what you know | text (`entity_other`) | no |
 | Counterparty name | text | yes |
 | Our role | dropdown (customer / supplier / partner / distributor / other) | yes |
+| If you chose Other: our role | text (`our_role_other`) | no |
 | Contract type | dropdown (NDA, MSA, SOW, SaaS, partnership, amendment / renewal, other) | yes |
+| If you chose Other: contract type | text (`contract_type_other`) | no |
 | Whose template | dropdown (ours / theirs / not sure) | yes |
 | Value band (annual) | dropdown (<EUR 10k, 10-50k, 50-100k, >100k, not sure) | yes |
 | Signing deadline | date | no |
@@ -81,8 +86,10 @@ An unanswered optional field is written as `Not sure`, never left out, so `/tria
 |---|---|---|
 | Your name, your myPOS email, your team | text | yes |
 | The question, in one sentence | text | yes |
-| Entity and licence | dropdown (myPOS AD (BNB), myPOS Limited (CBI EMI), myPOS Payments Ltd (FCA), other / not sure) | yes |
-| Markets affected | multi-select (EEA countries, UK, other) | yes |
+| myPOS entity concerned | dropdown: the group entity list below, then "Other / not sure" (block line `myPOS entity:`) | yes |
+| If you chose Other / not sure: which entity, or what you know | text (`entity_other`) | no |
+| Markets affected | multi-select (EEA (all), specific EEA countries, UK, outside EEA / UK) | yes |
+| Which countries (if specific or outside EEA / UK) | text (`markets_detail`) | no |
 | Product or feature | text | yes |
 | What decision depends on the answer | long text | yes |
 | Deadline | date | no |
@@ -93,6 +100,48 @@ An unanswered optional field is written as `Not sure`, never left out, so `/tria
 | Supporting documents | file upload (multiple) | no |
 
 "Has a regulator asked about this? = yes" must lead to the `regulator` risk flag at triage, which makes the ticket `critical` and exempt from the two-touch rule.
+
+### Group entity list (both forms, as of 29 Oct 2026)
+
+The same dropdown on both forms. `myPOS AD` no longer exists as such: it is the Bulgarian branch of myPOS Limited, code MPLB, listed first. Dormant entities sit at the end, before "Other / not sure". The list lives in the two Form Trigger nodes in n8n; when the group matrix changes, edit both triggers, re-publish the workflow, and update this list.
+
+1. MPLB - myPOS Limited - Branch Bulgaria (formerly myPOS AD)
+2. MPW - myPOS World
+3. MPP - myPOS Payments
+4. MPL - myPOS Ltd
+5. MPS - myPOS Services
+6. myPOS Limited - UK Branch
+7. Cyris BG
+8. Cyris AG
+9. myPOS Partners
+10. PT - Payment Technology France
+11. MPI - myPOS Italy
+12. MPNL - myPOS Netherlands
+13. MPB - myPOS Belgium
+14. myPOS Experience Centers B.V.
+15. MPBG - myPOS BG
+16. MPAT - myPOS AT
+17. MPRO - myPOS EC RO
+18. MPPGL - myPOS Portugal
+19. MPECL - myPOS EC Ireland
+20. MPHU - myPOS Hungary
+21. TopOrder
+22. myPOS UTP Group Limited
+23. myPOS Merchant Services (Ireland) Limited
+24. myPOS Merchant Services (Gibraltar) Limited
+25. myPOS Merchant Services (UK) Limited
+26. CRC Collections Ltd
+27. myPOS Rentals Limited
+28. Faster Processing International Limited
+29. Faster Processing Limited
+30. MYPOS CONSULTING SERVICES KFT
+31. IQOM PAYMENT SOLUTION KFT
+32. myPOS Technologies España, S.L.
+33. myPOS Germany Holding GmbH
+34. Lavego
+35. MPSW - myPOS Swiss (dormant)
+36. mPGB - myPOS GB (dormant)
+37. Other / not sure
 
 ## Go-live record (29 Oct 2026)
 
