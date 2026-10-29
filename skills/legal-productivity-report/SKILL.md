@@ -60,7 +60,7 @@ From the 1b result set (add `labels` to the fields), using the labels set by `ji
 - `two_touch_rate = within_two / max(1, eligible)`, overall and per `matter:*` label
 - `breached` = eligible tickets labelled `two-touch-breached` (list the keys)
 - `no_touch_count` = eligible tickets with no `touches:*` label (closed without `/reply-and-close`; report the count, do not guess)
-- `form_share` = share of closed `contract_review` / `regulatory_question` tickets labelled `intake:form`, and their two-touch rate compared with the same matter types without the label (the intake-form beta signal)
+- `form_share` = share of closed `contract_review` / `regulatory_question` tickets labelled `intake:form`, and their two-touch rate compared with the same matter types without the label (the intake-form beta signal). The label sits on the ticket the form answers were posted to, which is the same ticket the form link went out on, so form and email tickets are one population with full touch counts.
 
 ## Step 2: Prompt for off-Jira hours
 

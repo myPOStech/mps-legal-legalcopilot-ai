@@ -44,4 +44,5 @@ Spec: `docs/n8n-intake-form.md`. `/triage` only sends a form link when the URL b
 - **Contract review form URL:** `TBD`
 - **Regulatory question form URL:** `TBD`
 - **n8n workflow:** `Legal Intake` (`FicMGfmDaJxaXBym`), unpublished draft
-- **Labels on form tickets:** `intake:form`, `intake:contract-review-v1` / `intake:regulatory-question-v1`
+- **Mode:** when the form names an existing `LEGAL-*` ticket (the Copilot's link prefills it), the answers are posted as a comment on that ticket and the Copilot re-triages it; a new ticket is created only when no ticket is named
+- **Labels added by the form:** `intake:form`, `intake:contract-review-v1` / `intake:regulatory-question-v1` (on the ticket the answers landed on)

@@ -56,9 +56,9 @@ For `contract_review` and `regulatory_question` tickets on the `one_question_rou
 - the form URL in `config.md` is not `TBD`, and
 - 3 or more blocking items are missing (fewer than that: just ask them).
 
-The form submission comes back as a new ticket with the `intake:form` label. Link it to the original ticket as "relates to"; the answer on the new ticket is touch 2.
+The link carries the ticket key, so the submission comes back as an `Intake-Form:` **comment on the same ticket** (plus the `intake:form` label and any uploaded files). No second ticket is created. The Copilot re-triages the ticket with the new facts (`/triage` Step 3 treats that comment as the requester's reply); the answer is touch 2, counted on the same ticket as touch 1.
 
-Never send the form link on a ticket that already came from the form.
+Never send the form link on a ticket that already carries an `Intake-Form:` block, whether in its description or in a comment.
 
 ---
 

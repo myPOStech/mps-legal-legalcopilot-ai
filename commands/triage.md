@@ -59,7 +59,11 @@ Plus the bundled seed knowledge in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
 
 **Email pasted:** use the subject, body, and sender directly.
 
-**Intake form tickets:** if the description starts with an `Intake-Form:` line (or the ticket has the `intake:form` label), it was submitted through the n8n intake form (`docs/n8n-intake-form.md`). Read the labelled fields as given facts. Do not ask the requester again for anything the form already answers; a form answer of `Not sure` counts as a gap to assume or ask about in Step 4b. If the form has a `Related-Ticket:` line, link the two tickets as "relates to".
+**Intake form submissions** (`docs/n8n-intake-form.md`) arrive in one of two places:
+- as the ticket **description** starting with an `Intake-Form:` line (the requester came to the form on their own; new-ticket mode), or
+- as a **comment** starting with an `Intake-Form:` line on a ticket that already has an AI Triage comment (the Copilot sent the form link as touch 1; comment mode). Read the original description and the form comment together.
+
+In both cases read the labelled fields as given facts. Do not ask the requester again for anything the form already answers; a form answer of `Not sure` counts as a gap to assume or ask about in Step 4b. If the block says `Existing-Ticket-Given: {key} (not found)`, mention it in the Step 10 comment so the lawyer can link by hand.
 
 **Attachment gate:** if the ticket's substance lives in an attachment (scanned letter, PDF) and its text cannot be extracted from Jira in this session, STOP and tell the lawyer exactly which file to attach in chat. Do not classify from the summary alone.
 
@@ -82,7 +86,7 @@ Scan recent `## Case:` entries inside `legal_copilot_memory.md` for >90% similar
 | Conflict (same matter, contradictory asks) | Link both as "relates to", flag, escalate. Stop. |
 | New request | Continue. |
 
-**Re-triage cap:** if the ticket already carries an `## AI Triage` comment and there is NO human comment after it, do NOT run a fresh triage. If the SLA is breached, post one single escalation line mentioning the assignee; otherwise report "already triaged, awaiting lawyer" and stop.
+**Re-triage cap:** if the ticket already carries an `## AI Triage` comment and there is NO human comment after it, do NOT run a fresh triage. If the SLA is breached, post one single escalation line mentioning the assignee; otherwise report "already triaged, awaiting lawyer" and stop. An `Intake-Form:` comment posted after the AI Triage comment is the requester's reply (the form answers), so it lifts the cap: re-triage with the new facts, and on this second pass never send the form link again.
 
 ---
 
@@ -108,7 +112,7 @@ The chosen skill produces structured output: matter type, priority, SLA suggesti
 1. Decide whether the ticket is two-touch eligible (tier `standard`, or `high` without a critical flag; not a project, claim or inspection; no `full-track` label).
 2. Pick `resolution_path`: `answer_now`, `answer_on_assumptions`, `one_question_round`, or `full_track` (exempt tickets only).
 3. On an eligible ticket, split the skill's missing-information list into `questions_to_ask` (blocking, at most 3) and `assumptions` (everything else). Rewrite the draft so it answers on the assumptions, lists them in an **Assumptions** block, asks only `questions_to_ask` in one message, and has no sequential gating. On a `full_track` ticket, `questions_to_ask` is the skill's full missing-information list (no cap) and `assumptions` is empty; Step 10 prints it under "Missing information".
-4. On the `one_question_round` path for `contract_review` / `regulatory_question`, with 3+ blocking gaps and a form URL configured, the draft may send the intake form link instead of the questions.
+4. On the `one_question_round` path for `contract_review` / `regulatory_question`, with 3+ blocking gaps and a form URL configured, the draft may send the intake form link instead of the questions. Prefill the ticket key in the link (`docs/n8n-intake-form.md`, "How the Copilot sends the link") and state the key in the text; the answers then come back as a comment on this ticket, not as a new one.
 
 Add all of these to `triage_metadata` for Steps 5-8:
 

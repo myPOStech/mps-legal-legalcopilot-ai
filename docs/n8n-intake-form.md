@@ -17,28 +17,33 @@ Contract review and regulatory question requests arrive by email with too little
 One n8n workflow, `Legal Intake`, with two form triggers:
 
 ```
-[n8n Form Trigger: Contract review]  --\
-                                        >-- [Code: validate + build description] --> [Jira: create issue] --> [Jira: add attachments] --> [Form ending page]
-[n8n Form Trigger: Regulatory question] --/
+[n8n Form Trigger: Contract review]  --\                                            /-- existing LEGAL ticket named --> [Jira: add comment + labels] --> [Jira: add attachments to it] --\
+                                        >-- [Code: validate + build block] --> [IF] <                                                                                                   >-- [Form ending page]
+[n8n Form Trigger: Regulatory question] --/                                            \-- no ticket named -----------> [Jira: create issue]          --> [Jira: add attachments]      --/
 ```
 
-1. **Form Trigger** (one per form). Fields below. Turn on the trigger's basic authentication (a shared team credential), or only publish the URL on an internal SharePoint page. Do not leave an unauthenticated public URL that creates Jira tickets.
-2. **Code / validate.** Reject submissions whose requester email is not `@mypos.com` (show an error page). Trim free text. Build the description block below.
-3. **Jira: create issue.** Project `LEGAL`, issue type `Task`, summary `[{form}] {short title}`, description = the block below, labels `intake:form` and `intake:{form-id}` (e.g. `intake:contract-review-v1`). Use a service-account Jira credential, the same way the `Legal Copilot` filing workflow uses a service account for SharePoint.
-4. **Jira: add attachments.** Every uploaded file goes onto the new ticket. The Copilot's normal flow (`documents_from_jira`) then files them to SharePoint at triage.
-5. **Ending page.** "Thanks. Your request is {LEGAL-key}. Legal will send you a first response within 2 business days." (the `standard` tier first-response target in `knowledge/sla-policy.md`).
+1. **Form Trigger** (one per form). Fields below. Turn on the trigger's basic authentication (a shared team credential), or only publish the URL on an internal SharePoint page. Do not leave an unauthenticated public URL that writes to Jira.
+2. **Code / validate.** Reject submissions whose requester email is not `@mypos.com` (show an error page). Trim free text. Build the block below. Read the `Existing ticket (if any)` field; the Copilot's own link prefills it with the ticket key (see "How the Copilot sends the link"), so for a redirected requester it is already filled.
+3. **IF an existing `LEGAL-*` ticket is named and exists: comment mode.** Post the block as a **comment on that ticket**, add the labels `intake:form` and `intake:{form-id}` (e.g. `intake:contract-review-v1`) to it, and add every uploaded file to that ticket. No new ticket. This keeps one ticket per matter, so the two-touch count and the SLA stay on the ticket the requester already knows.
+4. **ELSE: new-ticket mode.** Project `LEGAL`, issue type `Task`, summary `[{form}] {short title}`, description = the block below, labels `intake:form` and `intake:{form-id}`, attachments on the new ticket. If the requester typed a ticket key that does not resolve, treat as new-ticket mode and write `Existing-Ticket-Given: {text} (not found)` in the block so the lawyer can link by hand. Use a service-account Jira credential in both modes, the same way the `Legal Copilot` filing workflow uses a service account for SharePoint.
+5. **Ending page.** Comment mode: "Thanks. Your answers were added to {LEGAL-key}; Legal will come back to you on that ticket." New-ticket mode: "Thanks. Your request is {LEGAL-key}. Legal will send you a first response within 2 business days." (the `standard` tier first-response target in `knowledge/sla-policy.md`).
 
-The Copilot does not need a new trigger: the 08:00 `/triage-board` sweep picks up the new To-Do ticket like any other.
+The Copilot does not need a new trigger. In comment mode the ticket is still `To Do`, so the 08:00 `/triage-board` sweep picks it up and `/triage` Step 3 treats the `Intake-Form:` comment as the requester's reply and re-triages with the new facts. In new-ticket mode the sweep picks up the new To-Do ticket like any other.
+
+## How the Copilot sends the link
+
+On the `one_question_round` path with 3+ blocking gaps (`knowledge/two-touch-rule.md`), touch 1 is the form link with the ticket key prefilled, e.g. `{form URL}?Existing%20ticket%20(if%20any)=LEGAL-6000` (n8n Form Trigger prefills a field from a query parameter whose name matches the field label). The draft also states the ticket key in words in case the prefill does not carry over. Never send the link on a ticket that already carries an `Intake-Form:` block.
 
 ## Description block (the contract with `/triage`)
 
-`/triage` Step 2 recognises a form ticket by the first line. Keep this format stable; bump the version (`v2`) if fields change.
+`/triage` Step 2 recognises a form submission by the first line, whether it is a ticket description (new-ticket mode) or a comment (comment mode). Keep this format stable; bump the version (`v2`) if fields change.
 
 ```
 Intake-Form: contract-review v1
 Submitted-By: {name} <{email}>
 Submitted-At: {ISO timestamp}
-Related-Ticket: {LEGAL-key or "none"}
+Mode: comment | new-ticket
+Existing-Ticket-Given: {text the requester typed, or "none"; "(not found)" appended when it did not resolve}
 ---
 {Field label}: {answer}
 {Field label}: {answer}
@@ -91,7 +96,8 @@ An unanswered optional field is written as `Not sure`, never left out, so `/tria
 
 ## Open items before go-live
 
-- Build the workflow in n8n and test it end to end on a test ticket.
+- Build the workflow in n8n, including the comment-mode branch, and test both modes on a test ticket: one submission with the ticket key prefilled from the link, one with no ticket.
+- Confirm the n8n version prefills the `Existing ticket (if any)` field from the URL query parameter. If it does not, the Copilot's draft must ask the requester to type the key, and the branch should also fall back to matching the requester's email against open LEGAL tickets that carry a sent form link.
 - Agree the access model (basic auth vs. internal SharePoint link only).
 - Paste the two production form URLs into `knowledge/config.md` and re-publish the plugin.
 - Check the n8n Form Trigger upload size limit against typical contract PDFs.

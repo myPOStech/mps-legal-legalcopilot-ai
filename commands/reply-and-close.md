@@ -81,7 +81,7 @@ Compare the sent body against the AI draft from Step 1:
 
 Count the **touches** on this matter (definition in `knowledge/two-touch-rule.md`: a message from Legal to the requester that delivers the answer or asks them for something; acknowledgements and Copilot-only Jira comments do not count):
 
-- Sent emails to the requester since the ticket was created: `outlook_email_search` on `Sent Items` (and the shared legal mailbox if (b) in Step 2) with the ticket key or summary keywords, `afterDateTime` = the ticket's `created` date. Count each distinct message once, including the reply found in Step 3.
+- Sent emails to the requester since the ticket was created: `outlook_email_search` on `Sent Items` (and the shared legal mailbox if (b) in Step 2) with the ticket key or summary keywords, `afterDateTime` = the ticket's `created` date. Count each distinct message once, including the reply found in Step 3. An intake-form link sent to the requester is a touch (the form answers then arrive as a comment on this same ticket, so both touches are counted here).
 - Jira comments by legal-team members (roster in `knowledge/team-routing.md`) that ask the requester something or give them the answer.
 
 Read `two_touch_eligible` from the ticket's `path:*` label (`path:full_track` = not eligible; no `path:*` label = triaged before 0.5.0, treat as not eligible). Record `touches = N`. If the ticket is eligible and `N > 2`, set `two_touch_breached = true` and note in one line why (e.g. "requester sent the contract only after the second ask"). The lawyer can correct the count in Step 5.
