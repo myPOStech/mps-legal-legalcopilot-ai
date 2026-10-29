@@ -1,6 +1,6 @@
 # n8n intake forms (beta)
 
-**Status: built as an unpublished draft (22 Oct 2026), not tested yet.** n8n workflow `Legal Intake` (`FicMGfmDaJxaXBym`), with raw submissions logged to the data table `legal_intake_submissions`. It needs a basic-auth credential ("Legal Intake form login") and a Jira Cloud credential selected before the first test. Until it is published and its URLs are in `knowledge/config.md` (section "Intake forms (beta)"), the Copilot never sends a form link; `/triage` just asks its (max 3) questions.
+**Status: built, comment mode included, live-tested on 29 Oct 2026 against LEGAL.** n8n workflow `Legal Intake` (`FicMGfmDaJxaXBym`), with raw submissions logged to the data table `legal_intake_submissions`. The basic-auth credential (`Legal Intake form login`) sits on both form triggers and a Jira Cloud credential on the five Jira calls. The production URLs are in `knowledge/config.md` (section "Intake forms (beta)"), so from plugin 0.5.1 the Copilot sends the form link on the `one_question_round` path when the workflow is published; while the workflow is unpublished the link returns a 404 and `/triage` should fall back to asking its (max 3) questions.
 
 ## Why
 
@@ -22,7 +22,7 @@ One n8n workflow, `Legal Intake`, with two form triggers:
 [n8n Form Trigger: Regulatory question] --/                                            \-- no ticket named -----------> [Jira: create issue]          --> [Jira: add attachments]      --/
 ```
 
-1. **Form Trigger** (one per form). Fields below. Turn on the trigger's basic authentication (a shared team credential), or only publish the URL on an internal SharePoint page. Do not leave an unauthenticated public URL that writes to Jira.
+1. **Form Trigger** (one per form). Fields below. Access model agreed on 29 Oct 2026: basic authentication with one shared team login (n8n credential `Legal Intake form login`), published on the internal Legal SharePoint page next to the links. An office / VPN IP allow-list (`ipWhitelist` option on the trigger) can be added later if IT provides the ranges. Never leave an unauthenticated public URL that writes to Jira.
 2. **Code / validate.** Reject submissions whose requester email is not `@mypos.com` (show an error page). Trim free text. Build the block below. Read the `Existing ticket (if any)` field; the Copilot's own link prefills it with the ticket key (see "How the Copilot sends the link"), so for a redirected requester it is already filled.
 3. **IF an existing `LEGAL-*` ticket is named and exists: comment mode.** Post the block as a **comment on that ticket**, add the labels `intake:form` and `intake:{form-id}` (e.g. `intake:contract-review-v1`) to it, and add every uploaded file to that ticket. No new ticket. This keeps one ticket per matter, so the two-touch count and the SLA stay on the ticket the requester already knows.
 4. **ELSE: new-ticket mode.** Project `LEGAL`, issue type `Task`, summary `[{form}] {short title}`, description = the block below, labels `intake:form` and `intake:{form-id}`, attachments on the new ticket. If the requester typed a ticket key that does not resolve, treat as new-ticket mode and write `Existing-Ticket-Given: {text} (not found)` in the block so the lawyer can link by hand. Use a service-account Jira credential in both modes, the same way the `Legal Copilot` filing workflow uses a service account for SharePoint.
@@ -32,7 +32,7 @@ The Copilot does not need a new trigger. In comment mode the ticket is still `To
 
 ## How the Copilot sends the link
 
-On the `one_question_round` path with 3+ blocking gaps (`knowledge/two-touch-rule.md`), touch 1 is the form link with the ticket key prefilled, e.g. `{form URL}?Existing%20ticket%20(if%20any)=LEGAL-6000` (n8n Form Trigger prefills a field from a query parameter whose name matches the field label). The draft also states the ticket key in words in case the prefill does not carry over. Never send the link on a ticket that already carries an `Intake-Form:` block.
+On the `one_question_round` path with 3+ blocking gaps (`knowledge/two-touch-rule.md`), touch 1 is the form link with the ticket key prefilled: `{form URL}?existing_ticket=LEGAL-6000`. n8n prefills a field from a query parameter whose name matches the field **name** (`existing_ticket`), not the label, and only on the production `/form/` URL, never on the `/form-test/` URL (n8n docs, Form Trigger, "Prefill form fields with query parameters"). The draft also states the ticket key in words in case the requester retypes the address. Never send the link on a ticket that already carries an `Intake-Form:` block.
 
 ## Description block (the contract with `/triage`)
 
@@ -94,10 +94,17 @@ An unanswered optional field is written as `Not sure`, never left out, so `/tria
 
 "Has a regulator asked about this? = yes" must lead to the `regulator` risk flag at triage, which makes the ticket `critical` and exempt from the two-touch rule.
 
-## Open items before go-live
+## Go-live record (29 Oct 2026)
 
-- Build the workflow in n8n, including the comment-mode branch, and test both modes on a test ticket: one submission with the ticket key prefilled from the link, one with no ticket.
-- Confirm the n8n version prefills the `Existing ticket (if any)` field from the URL query parameter. If it does not, the Copilot's draft must ask the requester to type the key, and the branch should also fall back to matching the requester's email against open LEGAL tickets that carry a sent form link.
-- Agree the access model (basic auth vs. internal SharePoint link only).
-- Paste the two production form URLs into `knowledge/config.md` and re-publish the plugin.
-- Check the n8n Form Trigger upload size limit against typical contract PDFs.
+- **Built and tested.** Comment-mode branch added (If "Ticket key given?", Jira get with the error output as fallback, Jira comment as ADF with one paragraph per line, additive label update through `PUT /rest/api/3/issue/{key}` with `update.labels.add`, "Mark not found" fallback). Live runs against LEGAL: no ticket named created LEGAL-6014; `LEGAL-999999` hit a real Jira "not found" and created LEGAL-6015 with `(not found)` in the block; naming LEGAL-6014 posted the block as comment 510831 on it and the label update returned HTTP 204. The comment reads back through the Atlassian connector with `Intake-Form:` as its first line.
+- **Prefill confirmed** from the n8n docs: query parameter keyed on the field name, production URL only (see "How the Copilot sends the link"). No email-matching fallback needed.
+- **Access model:** basic auth with the shared `Legal Intake form login` (see step 1 above).
+- **Production URLs** are in `knowledge/config.md` since plugin 0.5.1.
+- **Upload size:** n8n accepts files up to 200 MiB per field by default (`N8N_FORMDATA_FILE_SIZE_MAX`); the binding limit is Jira's own attachment limit, set by the Jira admin. Typical contract PDFs are well below either.
+
+## Still open
+
+- One real browser submission on the production URL after publishing, with a small PDF attached and the key prefilled from the link, to exercise basic auth, the prefill and the attachment path (the MCP test runs cannot carry files or the login prompt). Then close the test tickets.
+- Before the forms go to the whole company: swap the Jira credential for a Legal service account, so automated comments do not carry a colleague's name and the token does not expire with a person. Set a reminder for the API token's expiry date.
+- Rename the basic-auth credential in n8n from "Unnamed credential" to `Legal Intake form login`.
+- Jira renders the `---` separator line of the description block as an em dash; harmless for `/triage`, which keys on the `Field: value` lines.
