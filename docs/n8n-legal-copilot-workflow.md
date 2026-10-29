@@ -13,7 +13,7 @@ Workflow `Legal Copilot`, id `VAKq9Bra0RA0SdCO`, webhook `POST https://myposai.a
 | `documents_from_jira` | one of | `[{filename, jira_attachment_url, mime_type}]`. Fetched server-side with the Jira credential. |
 | `memory_instructions` | yes | Markdown string appended to the memory file. |
 
-Max 10 documents per call; each base64 document max ~8 MB. No documents = memory-only update.
+Max 10 documents per call; each document max ~8 MB once base64-encoded (about 6 MB of raw bytes, since base64 adds a third). No documents = memory-only update.
 
 ## Responses
 
@@ -37,7 +37,7 @@ Problem (F-1): `Fetch Jira Attachment` was blocked by the n8n Cloud SSRF guard (
 
 This differs from the proposal in `FIX-A-n8n-fetch-jira-attachment.md` (error output into a new Set node): with `continueErrorOutput`, a run where every fetch fails sends nothing down the success branch, so `Merge Jira Into State` never runs and the filing still stops. The success-branch Code node also paired items by index, which breaks once failed items leave on a separate output.
 
-The plugin side is in `sharepoint-filer` (0.5.0): attachments up to 8 MB go inline, so `documents_from_jira` is now only used for files over 8 MB.
+The plugin side is in `sharepoint-filer` (0.5.0): attachments up to 6 MB raw go inline, so `documents_from_jira` is now only used for files over 6 MB.
 
 ## 2026-10-07: FIX-04 (weekly usage review of 2 Oct 2026), published version `bccb4e14`
 

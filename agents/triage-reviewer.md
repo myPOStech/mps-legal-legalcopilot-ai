@@ -15,7 +15,7 @@ The calling command passes:
 - `matter_type`: one of the 10 matter types
 - `legal_triage_skill_used`: e.g., `legal-triage-nda`
 - `draft_text`: the draft response, in full
-- `triage_metadata`: dict with priority, SLA tier, jurisdictions, risk flags, recommended action, and the two-touch fields `two_touch_eligible`, `resolution_path`, `questions_to_ask`, `assumptions` (see `knowledge/two-touch-rule.md`)
+- `triage_metadata`: dict with priority, SLA tier, jurisdictions, risk flags, recommended action, and the two-touch fields `two_touch_eligible`, `resolution_path`, `questions_to_ask`, `assumptions` (see `knowledge/two-touch-rule.md`). On a `full_track` ticket `questions_to_ask` is the skill's full missing-information list, with no cap.
 - `relevant_patterns`: extracted entries from `_knowledge/patterns.md` that apply to this matter type / jurisdiction
 - `revision_pass_number`: 0 for the first pass, 1+ for re-reviews after edits
 

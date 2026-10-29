@@ -63,7 +63,7 @@ Use as the first line of any multi-step copilot run; it turns 20-minute failures
 ## 6. Weekly health check
 
 ```
-Run the Legal Copilot health check: plugin version vs GitHub, M365 get_granted_scopes, n8n last 7 days of Legal Copilot executions (errors only), newest [AI DRAFT LEGAL-] draft date, Jira read. Read-only. Report only what changed since last week.
+Run the Legal Copilot health check: plugin version vs GitHub, M365 get_granted_scopes, n8n last 7 days of Legal Copilot executions (errors only), newest [AI DRAFT LEGAL-] draft date, Jira read, and the "Policy version:" line of sla-policy.md, two-touch-rule.md and config.md on SharePoint _knowledge vs the plugin copies. Read-only. Report only what changed since last week.
 ```
 
-Why: the 23 Oct review found version drift (0.4.8 installed, 0.4.9 on GitHub) and a 9-day gap in Outlook drafts that a quick weekly check would have caught.
+Why: the 23 Oct review found version drift (0.4.8 installed, 0.4.9 on GitHub) and a 9-day gap in Outlook drafts that a quick weekly check would have caught. Since 0.5.0 the same drift can happen between the plugin's policy files and their SharePoint copies, which the scheduled sweep falls back to.

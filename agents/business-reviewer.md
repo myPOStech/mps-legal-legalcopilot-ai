@@ -117,6 +117,7 @@ The calling command:
 - Embeds `reconciliations` and `additional_findings` as Word comments in the `.docx` (alongside the Devil's advocate comments) so the lawyer sees all three perspectives.
 - Uses `final_draft` for the Outlook draft body and the Jira "Draft Response" section.
 - Surfaces `verdict`, `business_override`, and `summary` in the AI Triage Jira comment.
+- On a `revise` for a two-touch ticket, keeps the verdict as `revise` and sets `human_review_required = true` (`/triage` Step 6). It never reports that case as `approve`.
 
 ## Hard rules
 

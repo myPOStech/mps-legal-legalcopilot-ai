@@ -1,5 +1,7 @@
 # SLA policy
 
+Policy version: 0.5.0 (ships with plugin 0.5.0; the copy in the SharePoint `_knowledge` folder must carry the same version line, `/setup-copilot` checks it)
+
 The single source of truth for how long the Legal team has to close a ticket. `/triage`, `/triage-board` and `/triage-inbox` read this file after the `legal-triage-*` skill runs and use it to set `sla_days` (and therefore the Jira due date). The published skills still print their own "SLA Suggestion" (4h / 24h / 3 / 5 business days); treat that only as an urgency signal for picking the priority. It is **never** the `sla_days` written to Jira.
 
 To change a threshold: edit the tables below, bump the plugin version, re-publish. No skill needs to change.
@@ -35,7 +37,7 @@ Other flags the skills raise (`counterparty_template`, `data_processing`, `high_
 
 ## Tiers
 
-Pick the first row that matches, top to bottom.
+Pick the first row that matches, top to bottom. Priority codes map to the Jira priority names that `jira-fields-and-flags` uses: P1 = `Highest`, P2 = `High`, P3 = `Medium`, P4 = `Low` or `Lowest`.
 
 | Tier | When | `sla_days` | First response |
 |---|---|---|---|
@@ -78,7 +80,7 @@ The calling command passes these on to `jira-fields-and-flags`, the reviewers an
 ```json
 {
   "sla_tier": "critical" | "high" | "standard" | "project-pressing" | "project-standard",
-  "sla_days": 1-200,
+  "sla_days": 1-180,
   "sla_basis": "policy" | "external_deadline",
   "external_deadline": "YYYY-MM-DD" | null,
   "first_response_target": "4 hours" | "1 business day" | "2 business days" | "scoping call within 5 business days" | "scoping call within 10 business days"
@@ -90,6 +92,6 @@ The calling command passes these on to `jira-fields-and-flags`, the reviewers an
 ## Hard rules
 
 - NEVER write the skill's own "SLA Suggestion" into `sla_days`.
-- NEVER let `sla_days` exceed 200 or drop below 1.
+- NEVER let `sla_days` exceed 180 (the `project-standard` tier) or drop below 1.
 - NEVER downgrade a ticket with a critical flag below `critical` because the requester said it isn't urgent. Lawyers can do that by hand; the Copilot cannot.
 - A lawyer may change the due date on the ticket by hand at any time. If a ticket already has a `duedate` when the Copilot triages it, `jira-fields-and-flags` keeps it and only reports what the policy would have set.

@@ -14,7 +14,7 @@ Push deadlines, priority, labels and impediment flags into the Jira ticket itsel
 {
   "ticket_key": "LEGAL-4321",
   "priority": "Highest" | "High" | "Medium" | "Low" | "Lowest",
-  "sla_days": 1-200,
+  "sla_days": 1-180,
   "matter_type": "nda" | "contract_review" | ...,
   "risk_flags": ["regulator", "claim", "tight_deadline", "inspection"],
   "human_review_required": true | false,
@@ -24,7 +24,7 @@ Push deadlines, priority, labels and impediment flags into the Jira ticket itsel
 }
 ```
 
-`sla_days` comes from `knowledge/sla-policy.md` (applied by the caller in `/triage` Step 4b), never from the legal-triage skill's own SLA suggestion. Projects run up to 180 days, hence the 200 cap.
+`sla_days` comes from `knowledge/sla-policy.md` (applied by the caller in `/triage` Step 4b), never from the legal-triage skill's own SLA suggestion. Projects run up to 180 days (`project-standard`), hence the 180 cap.
 
 ## Step 1: Compute the due date
 

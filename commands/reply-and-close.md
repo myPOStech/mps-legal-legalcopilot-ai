@@ -118,7 +118,7 @@ Invoke the `sharepoint-filer` skill (n8n-backed) with:
 - `ticket_key`, `ticket_summary`, `matter_type` (from the AI Triage comment)
 - `files`:
   - The sent email, role `final_email`. Raw MIME is not retrievable through the connector, so render what `read_resource` returned (headers: from/to/cc/date/subject, then the body) as a single `.html` string and pass it in `text_documents` (`content_text`, `mime_type: text/html`); no base64 needed. Name it `{TICKET-KEY}_{tag}_{YYYY-MM-DD}_final.html`.
-  - Any new Jira attachments since `/triage` ran, handled per `sharepoint-filer` Step 3 item 4: signature / inline images skipped, real attachments up to 8 MB inline in `documents`, `documents_from_jira` only above 8 MB. Skip ones already listed in the case folder (check via `sharepoint_search` scoped to the case folder name).
+  - Any new Jira attachments since `/triage` ran, handled per `sharepoint-filer` Step 3 item 4: signature / inline images skipped (image files only), real attachments up to 6 MB raw inline in `documents`, `documents_from_jira` only above 6 MB, at most 10 documents per call. Skip ones already listed in the case folder (check via `sharepoint_search` scoped to the case folder name).
 - `memory_notes` -- a brief markdown block:
   - That the ticket was closed, the recipient list, the sent timestamp
   - Whether material edits were captured (and the category if so)
@@ -169,11 +169,11 @@ Memory file: [legal_copilot_memory.md]({memory_file_url})
 *Closed by Legal Copilot via n8n workflow VAKq9Bra0RA0SdCO.*
 ```
 
-Then set the touch labels: read the current labels, merge in `touches:{N}` (plus `two-touch-breached` when `two_touch_breached`), and write them back with one `mcp__atlassian__editJiraIssue` call. Never drop existing labels.
+Then set the touch labels: read the current labels, merge in `touches:{N}` (plus `two-touch-breached` when `two_touch_breached`), and write them back with one call to the Atlassian tool whose suffix is `editJiraIssue`. Never drop existing labels.
 
-Then transition to Done:
-1. `mcp__atlassian__getTransitionsForJiraIssue` to find the Done transition ID.
-2. `mcp__atlassian__transitionJiraIssue` to apply it.
+Then transition to Done (match Atlassian tools by suffix; the newer connector has no `getTransitionsForJiraIssue`):
+1. If a tool with suffix `getTransitionsForJiraIssue` exists, use it to find the Done transition ID. Otherwise pass the transition by name (`Done`) to the tool in step 2.
+2. The tool with suffix `transitionJiraIssue` to apply it.
 3. Re-read the assignee afterwards; if a workflow post-function changed it, restore the correct assignee.
 
 ---

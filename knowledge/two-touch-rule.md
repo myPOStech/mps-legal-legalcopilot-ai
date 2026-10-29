@@ -1,5 +1,7 @@
 # Two-touch rule
 
+Policy version: 0.5.0 (ships with plugin 0.5.0; the copy in the SharePoint `_knowledge` folder must carry the same version line, `/setup-copilot` checks it)
+
 Non-critical tickets should close in **no more than 2 interactions with the requester**. The triage skills tend to produce long missing-information lists (median 5 questions, up to 10, across the LEGAL tickets triaged between late August and October 2026) and multi-step paths ("confirm X, then send Y, then we will review"). Each of those is another round trip. This file sets the risk-based limit that `/triage`, the Devil's advocate pass and the business reviewer all apply.
 
 ---

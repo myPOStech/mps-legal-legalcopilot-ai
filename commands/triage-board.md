@@ -82,8 +82,8 @@ The first matching comment is the **last legal-team reply**. Its author is the *
 If a `last_replier` exists for a ticket:
 
 1. If `status == "To Do"`:
-   - `mcp__atlassian__getTransitionsForJiraIssue` to find the transition ID for `In Progress`.
-   - `mcp__atlassian__transitionJiraIssue` to move the ticket from To Do to In Progress.
+   - If a tool with suffix `getTransitionsForJiraIssue` exists, use it to find the transition ID for `In Progress`; otherwise pass the transition by name (the newer Atlassian connector has no transitions-lookup tool).
+   - The tool with suffix `transitionJiraIssue` to move the ticket from To Do to In Progress.
 2. If `current_assignee != last_replier` (re-check AFTER the transition):
    - Invoke `jira-auto-assign` with `force_reassign: true` and `override_account_id: {last_replier.account_id}` (the skill respects the override and skips its normal expertise-map logic). Record the rule applied as `last_replier`.
 3. **Verify:** re-read the assignee field after the transition + assignment. The LEGAL project's "Start Progress" post-function reassigns the ticket to the acting account (observed overwriting correct owners 6 times in June 2026). If the assignee is not the intended one, set it again and note the correction in Phase 6.

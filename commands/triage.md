@@ -107,7 +107,7 @@ The chosen skill produces structured output: matter type, priority, SLA suggesti
 
 1. Decide whether the ticket is two-touch eligible (tier `standard`, or `high` without a critical flag; not a project, claim or inspection; no `full-track` label).
 2. Pick `resolution_path`: `answer_now`, `answer_on_assumptions`, `one_question_round`, or `full_track` (exempt tickets only).
-3. On an eligible ticket, split the skill's missing-information list into `questions_to_ask` (blocking, at most 3) and `assumptions` (everything else). Rewrite the draft so it answers on the assumptions, lists them in an **Assumptions** block, asks only `questions_to_ask` in one message, and has no sequential gating.
+3. On an eligible ticket, split the skill's missing-information list into `questions_to_ask` (blocking, at most 3) and `assumptions` (everything else). Rewrite the draft so it answers on the assumptions, lists them in an **Assumptions** block, asks only `questions_to_ask` in one message, and has no sequential gating. On a `full_track` ticket, `questions_to_ask` is the skill's full missing-information list (no cap) and `assumptions` is empty; Step 10 prints it under "Missing information".
 4. On the `one_question_round` path for `contract_review` / `regulatory_question`, with 3+ blocking gaps and a form URL configured, the draft may send the intake form link instead of the questions.
 
 Add all of these to `triage_metadata` for Steps 5-8:
@@ -156,7 +156,8 @@ The agent returns: `verdict`, `business_override`, `summary`, `reconciliations`,
 **Verdict reconciliation (Devil's advocate + business):**
 
 - Both `approve` -> final verdict `approve`.
-- Devil's advocate `approve`, business `revise` -> apply the business `final_draft`. Final verdict `approve` (we are within review budget).
+- Devil's advocate `approve`, business `revise`, ticket NOT two-touch eligible -> apply the business `final_draft`. Final verdict `approve` (we are within review budget).
+- Business `revise` on a two-touch-eligible ticket (an `additional_findings` entry starting `[Interaction budget]`, or the draft still asks more than 3 questions or sets up a multi-step exchange) -> the business reviewer could not bring the draft within budget without changing the legal position. Keep the verdict `revise`, set `human_review_required = true`, use the business `final_draft` as the best available draft, and say in the Step 10 comment that the two-touch budget could not be met. Never report this as `approve`.
 - Devil's advocate `revise/escalate`, business `approve` (with `business_override: true`) -> only valid if NO risk flag set. Final verdict `approve`. Surface the override prominently in the Jira comment.
 - Either subagent escalates AND risk flag set -> `escalate`. `human_review_required = true`.
 - Otherwise default to the more conservative verdict.
@@ -181,7 +182,7 @@ Invoke `jira-auto-assign` with:
   "human_review_required": {bool},
   "risk_flags": [...],
   "priority": "{Jira priority}",
-  "sla_days": {N}
+  "sla_days": {N, from Step 4b}
 }
 ```
 
@@ -195,7 +196,7 @@ Invoke `jira-fields-and-flags` with:
 {
   "ticket_key": "{key}",
   "priority": "{priority}",
-  "sla_days": {N},
+  "sla_days": {N, from Step 4b -- never the skill's suggestion},
   "matter_type": "{...}",
   "risk_flags": [...],
   "human_review_required": {bool},
@@ -220,7 +221,7 @@ Invoke `sharepoint-filer` with the business reviewer's `final_draft`, all Jira a
 - One anchored comment per business reviewer additional finding.
 - A verdict summary comment on the document title that includes BOTH the Devil's advocate verdict and the business reviewer verdict.
 
-The filer validates and base64-encodes the draft `.docx` into the workflow's `documents` field. Jira attachments follow `sharepoint-filer` Step 3 item 4: signature / inline images (`image001.png` etc., or under 20 KB) are skipped, real attachments up to 8 MB go inline in `documents`, and only files over 8 MB go in `documents_from_jira` (the n8n SSRF guard usually blocks those). A failed attachment never stops the draft from being filed; the filer returns it in `attachments_not_filed`. If the case folder ends up with 0 files, the filer says so and retries once with `documents` only. **Allowed body keys: `case_id`, `case_folder`, `documents`, `text_documents`, `documents_from_jira`, `memory_instructions`. Never pass `file_manifest`, `payload_path` or `documents_from_url`.** Do NOT substitute a `.txt` "receipt" for the real document if base64-inlining feels awkward; the workflow will accept it and "succeed", but the case folder ends up with a receipt and no draft -- this is the failure mode we are trying to eliminate.
+The filer validates and base64-encodes the draft `.docx` into the workflow's `documents` field. Jira attachments follow `sharepoint-filer` Step 3 item 4: signature / inline images are skipped (image files only: `image001.png` etc., or an image under 20 KB; a non-image file is never skipped because of its size), real attachments up to 6 MB raw (about 8 MB once base64-encoded) go inline in `documents`, and only files over 6 MB go in `documents_from_jira` (the n8n SSRF guard usually blocks those). The filer caps one call at 10 documents and reports the rest in `attachments_not_filed`. A failed attachment never stops the draft from being filed; the filer returns it in `attachments_not_filed`. If the case folder ends up with 0 files, the filer says so and retries once with `documents` only. **Allowed body keys: `case_id`, `case_folder`, `documents`, `text_documents`, `documents_from_jira`, `memory_instructions`. Never pass `file_manifest`, `payload_path` or `documents_from_url`.** Do NOT substitute a `.txt` "receipt" for the real document if base64-inlining feels awkward; the workflow will accept it and "succeed", but the case folder ends up with a receipt and no draft -- this is the failure mode we are trying to eliminate.
 
 **On `success: false` -- HALT.** Surface the workflow error verbatim to the user. DO NOT proceed to Step 9 (draft delivery) or Step 10 (Jira AI Triage comment). A failed filing with a clear error is better than a "successful" filing of a stub that points the lawyer at an empty SharePoint folder. The lawyer can re-run `/file-to-sharepoint LEGAL-XXXX` once the underlying issue is resolved.
 
@@ -249,7 +250,7 @@ Never call any tool whose suffix is `outlook_send_mail`, `outlook_send_draft` or
 
 ## Step 10: Post the AI Triage Jira comment
 
-`mcp__atlassian__addCommentToJiraIssue` with `contentFormat: markdown`:
+Post the comment with the Atlassian tool whose suffix is `addOrEditJiraIssueComment` (newer connector) or `addCommentToJiraIssue` (older connector), `contentFormat: markdown`:
 
 ```markdown
 ---
@@ -260,7 +261,7 @@ Never call any tool whose suffix is `outlook_send_mail`, `outlook_send_draft` or
 **Jurisdictions:** {jurisdictions or "unspecified"}
 
 **Auto-assigned to:** {assignee_name} ({rule_applied})
-**Fields set:** priority={priority}, due={due_date}, flagged={yes|no}, labels=[{labels_added}]
+**Fields set:** priority={priority}, due={due_date}{if due_date_kept: " (existing date kept; policy would set " + policy_due_date + ")"}, flagged={yes|no}, labels=[{labels_added}]
 **SLA tier:** {sla_tier} ({sla_basis}{if external_deadline: ", external deadline " + external_deadline}) | **First response target:** {first_response_target}
 **Resolution path:** {resolution_path}{if two_touch_eligible: " (two-touch ticket)"}
 
@@ -275,6 +276,7 @@ Never call any tool whose suffix is `outlook_send_mail`, `outlook_send_draft` or
 
 **Devil's advocate verdict:** {da_verdict} -- {da_summary}
 **Business reviewer verdict:** {br_verdict}{if business_override: ' (OVERRIDE applied)'} -- {br_summary}
+{if two-touch budget not met: "**Two-touch budget not met:** the draft still needs more than 3 questions or a multi-step exchange; lawyer to decide."}
 
 **Filed to SharePoint:** [{matter_type}/{ticket_key}/]({sharepoint_folder_url})
 {list of {filename -> sharepoint_url} for each filed document}
@@ -300,7 +302,7 @@ Note: priority, due date, assignee, and flag are NOT repeated here as bullet ite
 
 ```
 Triage complete for {ticket_key}:
-  Matter: {type} | Priority: {priority} | SLA: {sla_tier}, {sla_days}d | Due: {due_date}
+  Matter: {type} | Priority: {priority} | SLA: {sla_tier}, {sla_days}d | Due: {due_date}{if due_date_kept: " (existing date kept)"}
   Path: {resolution_path} | Questions asked: {count of questions_to_ask} | Assumed: {count of assumptions}
   Assigned to: {assignee_name} ({rule_applied})
   Skill: {legal-triage-skill-name}

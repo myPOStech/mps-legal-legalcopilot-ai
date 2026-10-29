@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^mcp__(atlassian|Atlassian_MCP|claude_ai_Atlassian|microsoft-365|Microsoft_365|claude_ai_Microsoft_365|n8n|plugin_mypos-legal-copilot_[A-Za-z0-9_-]+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})__(addCommentToJiraIssue|addOrEditJiraIssueComment|atlassianUserInfo|createIssueLink|createJiraIssue|editJiraIssue|fetch|getAccessibleAtlassianResources|getIssueLinkTypes|getJiraIssue|getJiraIssueTypeMetaWithFields|getTransitionsForJiraIssue|listJiraIssueComments|lookupJiraAccountId|searchJiraIssuesUsingJql|transitionJiraIssue|outlook_create_draft|outlook_create_reply_draft|outlook_email_search|sharepoint_folder_search|sharepoint_list_items|sharepoint_read_file|sharepoint_search|read_resource|get_granted_scopes|execute_workflow|get_workflow_details|get_workflow_execution|get_workflow_history|search_workflow_executions|search_workflows)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"myPOS Legal Copilot: read, draft-create, Jira and n8n filing tool on the plugin allow list (hooks/hooks.json). Send and direct SharePoint-write tools are never allowed.\"}}'"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -115,7 +115,7 @@ One Word comment per finding (anchored to the relevant text range), plus a final
 For each file:
 
 1. **AI draft** -- if a recent draft exists in the most recent AI Triage Jira comment, render it to `.docx` (use the `docx` skill -- never `.md`). If review findings are present in the AI Triage comment, embed them as Word comments inside the draft `.docx`.
-2. **Jira attachments** -- follow `sharepoint-filer` Step 3 item 4: skip signature / inline images (`image001.png` etc., or under 20 KB), download real attachments up to 8 MB and send them inline in `documents`, and use `documents_from_jira` only for files over 8 MB. Skip any whose target filename already exists in the case folder.
+2. **Jira attachments** -- follow `sharepoint-filer` Step 3 item 4: skip signature / inline images (image files only: `image001.png` etc., or an image under 20 KB; never skip a non-image on size), download real attachments up to 6 MB raw and send them inline in `documents`, and use `documents_from_jira` only for files over 6 MB. At most 10 documents per call; the rest are reported in `attachments_not_filed`. Skip any whose target filename already exists in the case folder.
 3. **Jira comment thread** (only if `--include-comments`) -- render the full thread as `comments.docx` (one heading per comment, author + timestamp as sub-heading, body as paragraphs).
 
 For each file Claude builds (the draft and comments `.docx`), run the zip check from `sharepoint-filer` Step 3 item 6, then base64-encode the bytes into `documents` and pair with the IANA `mime_type`:

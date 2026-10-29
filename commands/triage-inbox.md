@@ -87,7 +87,7 @@ Also check sender domain matches and the recent `## Case:` entries inside `legal
 
 ### 3d. Run the full triage flow on the new ticket
 
-Same as `commands/triage.md` Steps 2-10: classify with the matching legal-triage skill, Devil's advocate + business review, auto-assign + set fields, file outputs to SharePoint via the n8n workflow (`sharepoint-filer` skill), deliver the draft per `/triage` Step 9 (Jira comment + SharePoint .docx + an Outlook reply draft in the original thread via the tool with suffix `outlook_create_reply_draft`, using the `Source-Message-Id`), post the AI Triage Jira comment.
+Same as `commands/triage.md` Steps 2-10: classify with the matching legal-triage skill, set the SLA and pick the resolution path (`/triage` Step 4b: `sla-policy.md` + `two-touch-rule.md`), Devil's advocate + business review, auto-assign + set fields, file outputs to SharePoint via the n8n workflow (`sharepoint-filer` skill), deliver the draft per `/triage` Step 9 (Jira comment + SharePoint .docx + an Outlook reply draft in the original thread via the tool with suffix `outlook_create_reply_draft`, using the `Source-Message-Id`), post the AI Triage Jira comment.
 
 If the n8n workflow fails for this ticket, capture the error and continue to the next email -- the new Jira ticket stays in To-Do for manual re-triage with `/triage <KEY>`. Do NOT post the AI Triage comment for that ticket.
 
