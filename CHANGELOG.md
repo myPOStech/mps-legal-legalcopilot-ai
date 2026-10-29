@@ -2,6 +2,22 @@
 
 All notable changes to the myPOS Legal Copilot plugin.
 
+## [0.5.1] - 2026-10-29
+
+Intake forms go live: production URLs in `knowledge/config.md`, prefill parameter corrected, workflow built and tested.
+
+### Changed
+- **`knowledge/config.md`**: the two intake form URLs replace `TBD` (`https://myposai.app.n8n.cloud/form/legal-contract-review` and `.../legal-regulatory-question`), plus the prefill parameter `?existing_ticket=LEGAL-NNNN` and the access model (shared basic-auth login published on the internal Legal SharePoint page). From this version `/triage` Step 4b sends the form link on the `one_question_round` path for contract review and regulatory question tickets with 3+ blocking gaps. Policy version line bumped to 0.5.1: copy the file to the SharePoint `_knowledge` folder again.
+- **`docs/n8n-intake-form.md`**: prefill is keyed on the field **name** (`existing_ticket`), not the label, and works only on the production URL; status, access model, go-live record of the 29 Oct live test (LEGAL-6014, LEGAL-6015) and the remaining open items.
+
+### n8n side (outside this repo)
+- `Legal Intake` workflow `FicMGfmDaJxaXBym`: comment-mode branch built (ticket lookup, comment as ADF, additive labels via REST, not-found fallback), credentials attached, three live runs passed. Publishing is a manual step in n8n.
+
+### Plugin version
+- Bumped to **0.5.1**. Run `/plugin update`; copy `config.md` to the SharePoint `_knowledge` folder; run `/setup-copilot`.
+
+---
+
 ## [0.5.0] - 2026-10-22
 
 Longer, risk-based SLAs; a two-interaction target for non-critical tickets; intake form beta (spec only).
