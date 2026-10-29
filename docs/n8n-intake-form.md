@@ -59,7 +59,7 @@ An unanswered optional field is written as `Not sure`, never left out, so `/tria
 | Field | Type | Required |
 |---|---|---|
 | Your name, your myPOS email, your team | text | yes |
-| myPOS entity signing | dropdown (myPOS AD, myPOS Limited, myPOS Payments Ltd, other / not sure) | yes |
+| myPOS entity signing | dropdown: the group entity list below, then "Other / not sure" | yes |
 | Counterparty name | text | yes |
 | Our role | dropdown (customer / supplier / partner / distributor / other) | yes |
 | Contract type | dropdown (NDA, MSA, SOW, SaaS, partnership, amendment / renewal, other) | yes |
@@ -81,7 +81,7 @@ An unanswered optional field is written as `Not sure`, never left out, so `/tria
 |---|---|---|
 | Your name, your myPOS email, your team | text | yes |
 | The question, in one sentence | text | yes |
-| Entity and licence | dropdown (myPOS AD (BNB), myPOS Limited (CBI EMI), myPOS Payments Ltd (FCA), other / not sure) | yes |
+| myPOS entity concerned | dropdown: the group entity list below, then "Other / not sure" (block line `myPOS entity:`) | yes |
 | Markets affected | multi-select (EEA countries, UK, other) | yes |
 | Product or feature | text | yes |
 | What decision depends on the answer | long text | yes |
@@ -93,6 +93,49 @@ An unanswered optional field is written as `Not sure`, never left out, so `/tria
 | Supporting documents | file upload (multiple) | no |
 
 "Has a regulator asked about this? = yes" must lead to the `regulator` risk flag at triage, which makes the ticket `critical` and exempt from the two-touch rule.
+
+### Group entity list (both forms, as of 29 Oct 2026)
+
+The same dropdown on both forms. `myPOS AD` no longer exists as such: it is `myPOS Limited - Branch Bulgaria`, listed first. Dormant entities sit at the end, before "Other / not sure". The list lives in the two Form Trigger nodes in n8n; when the group matrix changes, edit both triggers, re-publish the workflow, and update this list.
+
+1. myPOS Limited - Branch Bulgaria (formerly myPOS AD)
+2. MPW - myPOS World
+3. MPP - myPOS Payments
+4. MPL - myPOS Ltd
+5. MPS - myPOS Services
+6. MPLB - myPOS LTD Branch
+7. myPOS Limited - UK Branch
+8. Cyris BG
+9. Cyris AG
+10. myPOS Partners
+11. PT - Payment Technology France
+12. MPI - myPOS Italy
+13. MPNL - myPOS Netherlands
+14. MPB - myPOS Belgium
+15. myPOS Experience Centers B.V.
+16. MPBG - myPOS BG
+17. MPAT - myPOS AT
+18. MPRO - myPOS EC RO
+19. MPPGL - myPOS Portugal
+20. MPECL - myPOS EC Ireland
+21. MPHU - myPOS Hungary
+22. TopOrder
+23. myPOS UTP Group Limited
+24. myPOS Merchant Services (Ireland) Limited
+25. myPOS Merchant Services (Gibraltar) Limited
+26. myPOS Merchant Services (UK) Limited
+27. CRC Collections Ltd
+28. myPOS Rentals Limited
+29. Faster Processing International Limited
+30. Faster Processing Limited
+31. MYPOS CONSULTING SERVICES KFT
+32. IQOM PAYMENT SOLUTION KFT
+33. myPOS Technologies España, S.L.
+34. myPOS Germany Holding GmbH
+35. Lavego
+36. MPSW - myPOS Swiss (dormant)
+37. mPGB - myPOS GB (dormant)
+38. Other / not sure
 
 ## Go-live record (29 Oct 2026)
 
