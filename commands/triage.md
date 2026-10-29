@@ -41,10 +41,14 @@ Plus the bundled seed knowledge in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
 - `patterns.md` -- learned rules from lawyer feedback
 - `feedback-log.md` -- correction history (seed)
 - `team-routing.md` -- assignment rules (read by the auto-assign skill in Step 7)
+- `sla-policy.md` -- SLA tiers and due-date rules (Step 4b)
+- `two-touch-rule.md` -- resolution paths and the 3-question cap (Step 4b)
+- `config.md` -- intake form URLs (section "Intake forms (beta)")
 
 **Fallbacks (in order):**
 - SharePoint memory read fails -> continue with the seeds and surface a one-line warning.
-- `${CLAUDE_PLUGIN_ROOT}/knowledge/` unreadable (app-internal path; common in scheduled runs) -> fetch `team-routing.md`, `patterns.md` and `sharepoint-map.md` from the SharePoint `_knowledge` folder with the same search + read_resource pattern.
+- `${CLAUDE_PLUGIN_ROOT}/knowledge/` unreadable (app-internal path; common in scheduled runs) -> fetch `team-routing.md`, `patterns.md`, `sharepoint-map.md`, `sla-policy.md`, `two-touch-rule.md` and `config.md` from the SharePoint `_knowledge` folder with the same search + read_resource pattern.
+- `sla-policy.md` missing everywhere -> use the `standard` tier (14 days) for every non-critical ticket and `critical` (1 day) for anything with a risk flag; flag it in the final summary.
 - Missing there too -> continue with conservative defaults, flag it in the final summary, and suggest `/setup-copilot` to seed them.
 
 ---
@@ -54,6 +58,12 @@ Plus the bundled seed knowledge in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
 **Jira key provided:** `mcp__atlassian__getJiraIssue` with `responseContentFormat: markdown`. Extract summary, description, reporter, attachments list, existing comments.
 
 **Email pasted:** use the subject, body, and sender directly.
+
+**Intake form submissions** (`docs/n8n-intake-form.md`) arrive in one of two places:
+- as the ticket **description** starting with an `Intake-Form:` line (the requester came to the form on their own; new-ticket mode), or
+- as a **comment** starting with an `Intake-Form:` line on a ticket that already has an AI Triage comment (the Copilot sent the form link as touch 1; comment mode). Read the original description and the form comment together.
+
+In both cases read the labelled fields as given facts. Do not ask the requester again for anything the form already answers; a form answer of `Not sure` counts as a gap to assume or ask about in Step 4b. If the block says `Existing-Ticket-Given: {key} (not found)`, mention it in the Step 10 comment so the lawyer can link by hand.
 
 **Attachment gate:** if the ticket's substance lives in an attachment (scanned letter, PDF) and its text cannot be extracted from Jira in this session, STOP and tell the lawyer exactly which file to attach in chat. Do not classify from the summary alone.
 
@@ -76,15 +86,15 @@ Scan recent `## Case:` entries inside `legal_copilot_memory.md` for >90% similar
 | Conflict (same matter, contradictory asks) | Link both as "relates to", flag, escalate. Stop. |
 | New request | Continue. |
 
-**Re-triage cap:** if the ticket already carries an `## AI Triage` comment and there is NO human comment after it, do NOT run a fresh triage. If the SLA is breached, post one single escalation line mentioning the assignee; otherwise report "already triaged, awaiting lawyer" and stop.
+**Re-triage cap:** if the ticket already carries an `## AI Triage` comment and there is NO human comment after it, do NOT run a fresh triage. If the SLA is breached, post one single escalation line mentioning the assignee; otherwise report "already triaged, awaiting lawyer" and stop. An `Intake-Form:` comment posted after the AI Triage comment is the requester's reply (the form answers), so it lifts the cap: re-triage with the new facts, and on this second pass never send the form link again.
 
 ---
 
 ## Step 4: Classify using the matching legal-triage skill
 
-Pick exactly one of the 10 published legal-triage skills based on the matter and invoke it by its FULL published name, `anthropic-skills:legal-triage-{type}` (nda, contract-review, regulatory-question, corporate-change, project, kyc, gtcs, materials-review, claims, inspection-support). The `mypos-legal-copilot:legal-triage-*` entries in the skill list are pointer stubs with no playbook: never invoke them. If the loaded text says "STUB", retry with the `anthropic-skills:` prefix; if that also fails, set `human_review_required = true` and note the missing skill.
+Pick exactly one of the 10 published legal-triage skills based on the matter and invoke it by its FULL published name, `anthropic-skills:legal-triage-{type}` (nda, contract-review, regulatory-question, corporate-change, project, kyc, gtcs, materials-review, claims, inspection-support). The `mypos-legal-copilot:legal-triage-*` entries in the skill list are pointer stubs with no playbook: never invoke them. For NDAs use `anthropic-skills:legal-triage-nda`, never `legal:triage-nda` (the Anthropic legal plugin's generic NDA skill, which can also trigger on "NDA"). If the loaded text says "STUB", retry with the `anthropic-skills:` prefix; if that also fails, set `human_review_required = true` and note the missing skill.
 
-The chosen skill produces structured output: matter type, priority, SLA, jurisdiction, risk flags, missing-info questions, recommended action, draft response.
+The chosen skill produces structured output: matter type, priority, SLA suggestion, jurisdiction, risk flags, missing-info questions, recommended action, draft response. The skill's SLA suggestion is an urgency signal only; Step 4b sets the real SLA.
 
 **Risk gates (hard rules, never override):**
 - Any risk flag (regulator / inspection / claim / tight deadline) -> `human_review_required = true`
@@ -93,9 +103,34 @@ The chosen skill produces structured output: matter type, priority, SLA, jurisdi
 
 ---
 
+## Step 4b: Set the SLA and pick a resolution path
+
+**SLA.** Apply `knowledge/sla-policy.md` to the Step 4 output: pick the tier from priority, critical flags and matter type, then apply the external-deadline rule. Produce `sla_tier`, `sla_days`, `sla_basis`, `external_deadline` and `first_response_target`. Use this `sla_days` everywhere below, never the skill's suggestion.
+
+**Resolution path.** Apply `knowledge/two-touch-rule.md`:
+
+1. Decide whether the ticket is two-touch eligible (tier `standard`, or `high` without a critical flag; not a project, claim or inspection; no `full-track` label).
+2. Pick `resolution_path`: `answer_now`, `answer_on_assumptions`, `one_question_round`, or `full_track` (exempt tickets only).
+3. On an eligible ticket, split the skill's missing-information list into `questions_to_ask` (blocking, at most 3) and `assumptions` (everything else). Rewrite the draft so it answers on the assumptions, lists them in an **Assumptions** block, asks only `questions_to_ask` in one message, and has no sequential gating. On a `full_track` ticket, `questions_to_ask` is the skill's full missing-information list (no cap) and `assumptions` is empty; Step 10 prints it under "Missing information".
+4. On the `one_question_round` path for `contract_review` / `regulatory_question`, with 3+ blocking gaps and a form URL configured, the draft may send the intake form link instead of the questions. Prefill the ticket key in the link (`docs/n8n-intake-form.md`, "How the Copilot sends the link") and state the key in the text; the answers then come back as a comment on this ticket, not as a new one.
+
+Add all of these to `triage_metadata` for Steps 5-8:
+
+```json
+{
+  "sla_tier": "...", "sla_days": N, "sla_basis": "...", "external_deadline": "YYYY-MM-DD" | null,
+  "two_touch_eligible": true | false,
+  "resolution_path": "answer_now" | "answer_on_assumptions" | "one_question_round" | "full_track",
+  "questions_to_ask": ["..."],
+  "assumptions": ["..."]
+}
+```
+
+---
+
 ## Step 5: Devil's advocate review (review pass 1 of 2)
 
-Pass the draft from Step 4 to the `triage-reviewer` subagent. The subagent runs the published `anthropic-skills:devils-advocate` skill (never the plugin's `devils-advocate-review` stub) and returns `verdict`, `summary`, `findings`, optional `revised_draft`.
+Pass the draft from Step 4b (and the `triage_metadata`, including `two_touch_eligible`, `resolution_path`, `questions_to_ask` and `assumptions`) to the `triage-reviewer` subagent. The subagent runs the published `anthropic-skills:devils-advocate` skill (never the plugin's `devils-advocate-review` stub) and returns `verdict`, `summary`, `findings`, optional `revised_draft`.
 
 If verdict = `revise`: apply the suggested edits, re-run review. Cap at 2 revision passes; if still `revise`, set `human_review_required = true` and pass the latest draft into Step 6.
 
@@ -125,7 +160,8 @@ The agent returns: `verdict`, `business_override`, `summary`, `reconciliations`,
 **Verdict reconciliation (Devil's advocate + business):**
 
 - Both `approve` -> final verdict `approve`.
-- Devil's advocate `approve`, business `revise` -> apply the business `final_draft`. Final verdict `approve` (we are within review budget).
+- Devil's advocate `approve`, business `revise`, ticket NOT two-touch eligible -> apply the business `final_draft`. Final verdict `approve` (we are within review budget).
+- Business `revise` on a two-touch-eligible ticket (an `additional_findings` entry starting `[Interaction budget]`, or the draft still asks more than 3 questions or sets up a multi-step exchange) -> the business reviewer could not bring the draft within budget without changing the legal position. Keep the verdict `revise`, set `human_review_required = true`, use the business `final_draft` as the best available draft, and say in the Step 10 comment that the two-touch budget could not be met. Never report this as `approve`.
 - Devil's advocate `revise/escalate`, business `approve` (with `business_override: true`) -> only valid if NO risk flag set. Final verdict `approve`. Surface the override prominently in the Jira comment.
 - Either subagent escalates AND risk flag set -> `escalate`. `human_review_required = true`.
 - Otherwise default to the more conservative verdict.
@@ -150,7 +186,7 @@ Invoke `jira-auto-assign` with:
   "human_review_required": {bool},
   "risk_flags": [...],
   "priority": "{Jira priority}",
-  "sla_days": {N}
+  "sla_days": {N, from Step 4b}
 }
 ```
 
@@ -164,11 +200,13 @@ Invoke `jira-fields-and-flags` with:
 {
   "ticket_key": "{key}",
   "priority": "{priority}",
-  "sla_days": {N},
+  "sla_days": {N, from Step 4b -- never the skill's suggestion},
   "matter_type": "{...}",
   "risk_flags": [...],
   "human_review_required": {bool},
-  "today_iso": "{YYYY-MM-DD}"
+  "today_iso": "{YYYY-MM-DD}",
+  "sla_tier": "{from Step 4b}",
+  "resolution_path": "{from Step 4b}"
 }
 ```
 
@@ -187,7 +225,7 @@ Invoke `sharepoint-filer` with the business reviewer's `final_draft`, all Jira a
 - One anchored comment per business reviewer additional finding.
 - A verdict summary comment on the document title that includes BOTH the Devil's advocate verdict and the business reviewer verdict.
 
-The filer validates and base64-encodes the draft `.docx` into the workflow's `documents` field, and passes every Jira attachment by URL in `documents_from_jira` (n8n fetches them server-side). **Allowed body keys: `case_id`, `case_folder`, `documents`, `text_documents`, `documents_from_jira`, `memory_instructions`. Never pass `file_manifest`, `payload_path` or `documents_from_url`.** Do NOT substitute a `.txt` "receipt" for the real document if base64-inlining feels awkward; the workflow will accept it and "succeed", but the case folder ends up with a receipt and no draft -- this is the failure mode we are trying to eliminate.
+The filer validates and base64-encodes the draft `.docx` into the workflow's `documents` field. Jira attachments follow `sharepoint-filer` Step 3 item 4: signature / inline images are skipped (image files only: `image001.png` etc., or an image under 20 KB; a non-image file is never skipped because of its size), real attachments up to 6 MB raw (about 8 MB once base64-encoded) go inline in `documents`, and only files over 6 MB go in `documents_from_jira` (the n8n SSRF guard usually blocks those). The filer caps one call at 10 documents and reports the rest in `attachments_not_filed`. A failed attachment never stops the draft from being filed; the filer returns it in `attachments_not_filed`. If the case folder ends up with 0 files, the filer says so and retries once with `documents` only. **Allowed body keys: `case_id`, `case_folder`, `documents`, `text_documents`, `documents_from_jira`, `memory_instructions`. Never pass `file_manifest`, `payload_path` or `documents_from_url`.** Do NOT substitute a `.txt` "receipt" for the real document if base64-inlining feels awkward; the workflow will accept it and "succeed", but the case folder ends up with a receipt and no draft -- this is the failure mode we are trying to eliminate.
 
 **On `success: false` -- HALT.** Surface the workflow error verbatim to the user. DO NOT proceed to Step 9 (draft delivery) or Step 10 (Jira AI Triage comment). A failed filing with a clear error is better than a "successful" filing of a stub that points the lawyer at an empty SharePoint folder. The lawyer can re-run `/file-to-sharepoint LEGAL-XXXX` once the underlying issue is resolved.
 
@@ -199,16 +237,16 @@ Draft delivery has three surfaces, in order of preference:
 
 1. The full draft ALWAYS goes into the "Draft Response" section of the AI Triage Jira comment (Step 10). That comment is the lawyer's primary review surface, and the guaranteed fallback.
 2. The annotated `.docx` filed to SharePoint in Step 8 is the editable copy.
-3. Native Outlook draft (best effort). Match draft-creation tools by SUFFIX, not by a hard-coded name. In order:
-   - If the request arrived by email and you have the original Outlook message id (`Source-Message-Id` in the ticket description, or the pasted email), use the tool whose suffix is `outlook_create_reply_draft` so the draft stays in the thread.
-   - Otherwise use the tool whose suffix is `outlook_create_draft` (observed working on LEGAL-5438, 15 Jul 2026).
-   Subject: `[AI DRAFT {ticket_key}] Re: {ticket summary}`. Body: the business reviewer `final_draft` as HTML, first line `AI DRAFT - lawyer review required before sending`. Recipients: the original requester only; never add external parties. Example (new message):
+3. Native Outlook draft (best effort). Match draft-creation tools by SUFFIX, not by a hard-coded name.
+   a. **Subject** must be exactly `[AI DRAFT {ticket_key}] Re: {original subject}`, where the original subject is the request email's subject (or the ticket summary when the request did not come by email). Never create a draft without this prefix: a 14 Oct 2026 draft without it ("RE: URSSAF possible phishing") could not be traced to its ticket.
+   b. **Tool:** if you have the original Outlook message id (`Source-Message-Id` in the ticket description, or the pasted email), use the tool whose suffix is `outlook_create_reply_draft` so the draft stays in the thread; otherwise the tool whose suffix is `outlook_create_draft`. Body: the business reviewer `final_draft` as HTML, first line `AI DRAFT - lawyer review required before sending`. Recipients: the original requester only; never add external parties. Never call send tools. Example (new message):
    ```json
-   {"subject": "[AI DRAFT {ticket_key}] Re: {ticket summary}", "body": "{final_draft as HTML with the AI DRAFT banner}", "bodyType": "html", "to": ["{requester email}"]}
+   {"subject": "[AI DRAFT {ticket_key}] Re: {original subject}", "body": "{final_draft as HTML with the AI DRAFT banner}", "bodyType": "html", "to": ["{requester email}"]}
    ```
-   Include the returned draft id / `webLink` in Steps 10 and 11. The draft lands in the lawyer's own Outlook Drafts folder; it is never sent.
-4. n8n fallback. If neither draft tool is present under any prefix, or the call fails with an auth / connection error (the connector was invalidated on 2 Oct 2026), call the n8n `search_workflows` tool once per session with query `Legal Copilot Draft`. If it returns workflow `zMZJM8RvzluqLIrl` with `active: true`, call it via `execute_workflow` with `{"ticket_key": "{key}", "subject": "[AI DRAFT {key}] Re: {ticket summary}", "body_html": "{final_draft as HTML}", "to": ["{requester email}"]}` and include the returned `webLink`. If the workflow is missing or inactive, skip it.
-5. Neither route worked: continue. Record `Outlook draft: not created ({reason})` in Steps 10 and 11. Do NOT halt the triage for a missing Outlook draft; the Jira comment and SharePoint `.docx` are sufficient.
+   c. **Verify:** call the tool whose suffix is `outlook_email_search` with `folderName: "Drafts"` and query `[AI DRAFT {ticket_key}]`. No hit: retry the create once and verify again. Still no hit: go to 4.
+   d. Include the draft's `webLink` in Steps 10 and 11. The draft lands in the lawyer's own Outlook Drafts folder; it is never sent.
+4. n8n fallback, only when step 3 did not produce a verified draft. Call the n8n `search_workflows` tool once per session with query `Legal Copilot Draft`. If it returns workflow `zMZJM8RvzluqLIrl` with `active: true`, call it via `execute_workflow` with `{"ticket_key": "{key}", "subject": "[AI DRAFT {key}] Re: {original subject}", "body_html": "{final_draft as HTML}", "to": ["{requester email}"]}` and include the returned `webLink`. If the workflow is missing or inactive, skip it.
+5. **Always record one line**, in Steps 10 and 11 and in the `/triage-board` summary: `Outlook draft: created (subject [AI DRAFT {key}] Re: ...)` or `Outlook draft: NOT created, reason: {tool declined | not allowed | no draft tool | no message id | not found in Drafts after retry | error text}`. A missing draft never halts the triage (the Jira comment and SharePoint `.docx` are enough), but a missing reason line is a defect: drafts stopped appearing after 14 Oct 2026 and no run said why.
 
 Never call any tool whose suffix is `outlook_send_mail`, `outlook_send_draft` or `outlook_forward_mail`. Creating a draft is allowed; sending is not.
 
@@ -216,7 +254,7 @@ Never call any tool whose suffix is `outlook_send_mail`, `outlook_send_draft` or
 
 ## Step 10: Post the AI Triage Jira comment
 
-`mcp__atlassian__addCommentToJiraIssue` with `contentFormat: markdown`:
+Post the comment with the Atlassian tool whose suffix is `addOrEditJiraIssueComment` (newer connector) or `addCommentToJiraIssue` (older connector), `contentFormat: markdown`:
 
 ```markdown
 ---
@@ -227,21 +265,28 @@ Never call any tool whose suffix is `outlook_send_mail`, `outlook_send_draft` or
 **Jurisdictions:** {jurisdictions or "unspecified"}
 
 **Auto-assigned to:** {assignee_name} ({rule_applied})
-**Fields set:** priority={priority}, due={due_date}, flagged={yes|no}, labels=[{labels_added}]
+**Fields set:** priority={priority}, due={due_date}{if due_date_kept: " (existing date kept; policy would set " + policy_due_date + ")"}, flagged={yes|no}, labels=[{labels_added}]
+**SLA tier:** {sla_tier} ({sla_basis}{if external_deadline: ", external deadline " + external_deadline}) | **First response target:** {first_response_target}
+**Resolution path:** {resolution_path}{if two_touch_eligible: " (two-touch ticket)"}
 
 {if risk flags: "**Risk flags:** {flags}"}
 {if human_review_required: "**NEEDS HUMAN REVIEW BEFORE SEND**"}
 {if similar past ticket: "**Similar past ticket:** {key} -- response adapted from previous matter"}
-{if missing info: "**Missing information:**\n{questions}"}
+{if questions_to_ask: "**Asked in the draft (max 3):**\n{questions_to_ask}"}
+{if assumptions: "**Assumed, not asked:**\n{assumptions}"}
+{if full_track and missing info: "**Missing information:**\n{questions}"}
 
 **Recommended action:** {action}
 
 **Devil's advocate verdict:** {da_verdict} -- {da_summary}
 **Business reviewer verdict:** {br_verdict}{if business_override: ' (OVERRIDE applied)'} -- {br_summary}
+{if two-touch budget not met: "**Two-touch budget not met:** the draft still needs more than 3 questions or a multi-step exchange; lawyer to decide."}
 
 **Filed to SharePoint:** [{matter_type}/{ticket_key}/]({sharepoint_folder_url})
 {list of {filename -> sharepoint_url} for each filed document}
+{if attachments_not_filed: "**Attachments not filed:** {filename} ({reason}), ..."}
 **Memory file updated:** [legal_copilot_memory.md]({memory_file_url})
+**Outlook draft:** {created (subject ...) | NOT created, reason: ...}
 
 ---
 ## Draft Response (for lawyer to review, edit, and send)
@@ -261,14 +306,16 @@ Note: priority, due date, assignee, and flag are NOT repeated here as bullet ite
 
 ```
 Triage complete for {ticket_key}:
-  Matter: {type} | Priority: {priority} | SLA: {sla_days}d | Due: {due_date}
+  Matter: {type} | Priority: {priority} | SLA: {sla_tier}, {sla_days}d | Due: {due_date}{if due_date_kept: " (existing date kept)"}
+  Path: {resolution_path} | Questions asked: {count of questions_to_ask} | Assumed: {count of assumptions}
   Assigned to: {assignee_name} ({rule_applied})
   Skill: {legal-triage-skill-name}
   Risk flags: {flags or "none"}
   Devil's advocate: {da_verdict} | Business reviewer: {br_verdict}{if override: ' (override)'}
   Filed: {sharepoint_folder_url}
   Memory: {memory_file_url}
-  Outlook draft: {webLink | "not created ({reason}) -- draft is in the Jira comment"}
+  {if attachments_not_filed: "Attachments not filed: {filename} ({reason}), ..."}
+  Outlook draft: {"created (subject [AI DRAFT {key}] Re: ...) " + webLink | "NOT created, reason: {reason} -- draft is in the Jira comment"}
   Jira comment posted; fields set: priority, due, labels, flag.
   {if human_review_required: "Lawyer review required before /reply-and-close"}
 ```
@@ -285,6 +332,8 @@ Triage complete for {ticket_key}:
 - NEVER let `business_override: true` ride if any risk flag is set.
 - NEVER fabricate `context.is_strategic_partner` -- pass `unknown` if you do not know.
 - NEVER override risk gates.
+- NEVER use the legal-triage skill's own SLA suggestion as `sla_days`. `knowledge/sla-policy.md` sets it (Step 4b).
+- NEVER put more than 3 questions to the requester in the draft of a two-touch ticket. Everything else is an assumption (Step 4b, `knowledge/two-touch-rule.md`).
 - NEVER reassign an already-assigned ticket from /triage. That is `/triage-board`'s job.
 - NEVER re-triage a ticket whose last AI Triage comment has no human reply after it (see Step 3 re-triage cap).
 - NEVER post the AI Triage comment if the n8n filing returned `success: false`.

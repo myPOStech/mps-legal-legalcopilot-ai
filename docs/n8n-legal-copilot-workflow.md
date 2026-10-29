@@ -13,16 +13,31 @@ Workflow `Legal Copilot`, id `VAKq9Bra0RA0SdCO`, webhook `POST https://myposai.a
 | `documents_from_jira` | one of | `[{filename, jira_attachment_url, mime_type}]`. Fetched server-side with the Jira credential. |
 | `memory_instructions` | yes | Markdown string appended to the memory file. |
 
-Max 10 documents per call; each base64 document max ~8 MB. No documents = memory-only update.
+Max 10 documents per call; each document max ~8 MB once base64-encoded (about 6 MB of raw bytes, since base64 adds a third). No documents = memory-only update.
 
 ## Responses
 
 | HTTP | Body | Meaning |
 |---|---|---|
-| 200 | `{success, case_id, message, documents_filed[], memory_file_updated, memory_file_path}` | Filed. Check each `documents_filed[].status`; `success_but_empty` is a failure. |
+| 200 | `{success, case_id, message, documents_filed[], memory_file_updated, memory_file_path}` | Filed. Check each `documents_filed[].status`; `success_but_empty` is a failure. `fetch_failed` (a `documents_from_jira` attachment n8n could not download, with a `reason`) is reported but does not set `success: false`. |
 | 400 | `{success:false, error}` | `case_id` / `case_folder` missing or `case_folder` contains the `case_id`. |
 | 422 | `{success:false, error}` | Payload rejected in `Resume State`: `docx_invalid: ...`, too many documents, oversize document, malformed `text_documents` / `documents_from_jira` item. |
 | error / timeout | n/a | Upload or memory step failed after 3 retries, or `memory_download_failed` (the memory file could not be read, so it was not overwritten). Treat as `success:false`. |
+
+## 2026-10-27: FIX-A (weekly usage review of 23 Oct 2026), draft version `8773470a`, NOT YET PUBLISHED
+
+Rollback target: version `bccb4e14` (7 Oct 2026, still the live version until `8773470a` is published).
+
+Problem (F-1): `Fetch Jira Attachment` was blocked by the n8n Cloud SSRF guard (Jira's attachment host resolves to private IPs: execs 25235 on 12 Oct and 26726 on 14 Oct). The error aborted the whole filing, so the `LEGAL-5886` and `LEGAL-5915` case folders were created with 0 files.
+
+- `Fetch Jira Attachment`: no retries (they cannot get past an SSRF block), `onError: continueRegularOutput`.
+- `Jira Binary To Base64`: always emits exactly one item `{fetched, failed}`. A fetch that errored or returned no bytes becomes `{filename, status: "fetch_failed", reason}`.
+- `Merge Jira Into State`: adds the fetched files to `documents` and carries `jira_failed`.
+- `Collect Upload Results` and `Memory Only Bridge`: append the `fetch_failed` entries to `uploaded_files`, so they appear in `documents_filed`, the response `message` and the memory entry. `all_succeeded` still only looks at real uploads.
+
+This differs from the proposal in `FIX-A-n8n-fetch-jira-attachment.md` (error output into a new Set node): with `continueErrorOutput`, a run where every fetch fails sends nothing down the success branch, so `Merge Jira Into State` never runs and the filing still stops. The success-branch Code node also paired items by index, which breaks once failed items leave on a separate output.
+
+The plugin side is in `sharepoint-filer` (0.5.0): attachments up to 6 MB raw go inline, so `documents_from_jira` is now only used for files over 6 MB.
 
 ## 2026-10-07: FIX-04 (weekly usage review of 2 Oct 2026), published version `bccb4e14`
 

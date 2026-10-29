@@ -15,7 +15,7 @@ The calling command passes:
 - `matter_type`: one of the 10 matter types
 - `legal_triage_skill_used`: e.g., `legal-triage-nda`
 - `draft_text`: the draft response, in full
-- `triage_metadata`: dict with priority, SLA, jurisdictions, risk flags, missing-info questions, recommended action
+- `triage_metadata`: dict with priority, SLA tier, jurisdictions, risk flags, recommended action, and the two-touch fields `two_touch_eligible`, `resolution_path`, `questions_to_ask`, `assumptions` (see `knowledge/two-touch-rule.md`). On a `full_track` ticket `questions_to_ask` is the skill's full missing-information list, with no cap.
 - `relevant_patterns`: extracted entries from `_knowledge/patterns.md` that apply to this matter type / jurisdiction
 - `revision_pass_number`: 0 for the first pass, 1+ for re-reviews after edits
 
@@ -29,6 +29,8 @@ The calling command passes:
    - **blocker** -- factual errors, missing safety hedges on advice that could be relied upon, missed risk flags, accidentally definitive legal opinions, mention of individuals by name, missing `[DRAFT]` banner
    - **concern** -- weak hedging on a high-stakes statement, missing applicable pattern (e.g., didn't reference the Bulgarian Commerce Act on a Bulgarian NDA), unclear scope, missing recommended next step
    - **nit** -- tone, jargon, formatting, minor stylistic improvements
+
+   **Two-touch tickets** (`two_touch_eligible: true`): when you find a gap, the `suggested_edit` turns it into an assumption ("We've assumed X; tell us if not") or a caveat. Suggest a new question to the requester only if the gap is blocking AND `questions_to_ask` has fewer than 3 entries. A finding of the form "ask the requester for X" is a `concern` at most, never a `blocker`, unless the answer would change the legal position. An assumption that turns a legal position into a guess is a `blocker`.
 
 4. **Pick a verdict:**
 

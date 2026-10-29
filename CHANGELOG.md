@@ -2,6 +2,50 @@
 
 All notable changes to the myPOS Legal Copilot plugin.
 
+## [0.5.0] - 2026-10-22
+
+Longer, risk-based SLAs; a two-interaction target for non-critical tickets; intake form beta (spec only).
+
+### Added
+- **`knowledge/sla-policy.md`** -- one SLA policy for every triage. Tiers: `critical` 1 day, `high` 7 days, `standard` (non-critical) 14 days, `project-pressing` 90 days, `project-standard` 180 days, all in calendar days, with a separate first-response target per tier. A hard external deadline pulls the due date earlier (2 business days before it; 10 for projects). The legal-triage skills' own SLA suggestions (4h / 24h / 3 / 5 business days) are no longer used for due dates.
+- **`knowledge/two-touch-rule.md`** -- non-critical tickets (`standard`, and `high` without a critical flag) should close in at most 2 interactions with the requester. Each triage picks a resolution path (`answer_now`, `answer_on_assumptions`, `one_question_round`, `full_track`), asks at most 3 blocking questions, and turns the rest into stated assumptions. Critical tickets, projects, claims and inspections are exempt.
+- **`docs/n8n-intake-form.md`** -- spec for the `Legal Intake` n8n workflow (contract review + regulatory question forms), built in n8n as an unpublished draft (`FicMGfmDaJxaXBym`). Form URLs in `knowledge/config.md` are `TBD`, so the Copilot never sends a link until they are filled in.
+- `/triage` Step 4b: applies the SLA policy and the two-touch rule after classification. The AI Triage comment now shows the SLA tier, first-response target, resolution path, the questions asked and what was assumed.
+- `/triage` Step 2 reads `Intake-Form:` blocks (ticket description or comment) as given facts.
+
+### Changed
+- `jira-fields-and-flags`: `sla_days` range 1-180 (was 1-90); adds `sla:{tier}` and `path:{resolution_path}` labels; keeps a due date that is already on the ticket.
+- `jira-auto-assign`: `sla_days` range 1-180.
+- `triage-reviewer` (Devil's advocate): on two-touch tickets, gaps become assumptions or caveats, not new questions.
+- `business-reviewer`: fourth axis "interaction budget"; fixes over-long question lists itself and returns `revise` if the draft still needs more than 3 questions or a multi-step path.
+- `/triage-board` Phase 4 SLA watchdog: SLA window is now `duedate - created`, tier read from the `sla:*` label. Tickets with no `duedate` (triaged before the Copilot set Jira fields) are skipped by design; a lawyer can set a due date by hand to bring one back under the watchdog.
+- `/reply-and-close`: counts touches with the requester, labels `touches:{N}` and `two-touch-breached`.
+- `/legal-report`: reports the two-touch rate by matter type and the intake form share.
+
+### Fixed (weekly usage review of 23 Oct 2026, FIX-A to FIX-E)
+- **Jira attachments no longer abort SharePoint filing (FIX-A, FIX-B).** n8n Cloud's SSRF guard blocks `documents_from_jira` fetches (execs 25235, 26726), which left the `LEGAL-5886` and `LEGAL-5915` case folders empty. `sharepoint-filer` now skips signature / inline images (image files only: `image001.png` etc., or an image under 20 KB; a non-image is never skipped on size), sends real attachments up to 6 MB raw (about 8 MB base64) inline in `documents`, uses `documents_from_jira` only above 6 MB, and caps a call at the workflow's 10 documents. Anything not filed is returned in `attachments_not_filed` and shown as "Attachments not filed: ..." in the Jira comment. If a case folder ends up with 0 files, the filer says so and retries once with `documents` only. Same rules in `/triage` Step 8, `/file-to-sharepoint` and `/reply-and-close`. Server side: a draft version of the n8n `Legal Copilot` workflow (`8773470a`) reports blocked fetches as `fetch_failed` instead of stopping (`docs/n8n-legal-copilot-workflow.md`); **it is live only once published**.
+- **Outlook drafts are verified and always explained (FIX-C).** `/triage` Step 9: subject must be exactly `[AI DRAFT {key}] Re: {original subject}`; after creating, search Drafts for it, retry once, then the n8n fallback only if `zMZJM8RvzluqLIrl` is active. Every triage, and the `/triage-board` summary, prints `Outlook draft: created (...)` or `Outlook draft: NOT created, reason: ...`. No prefixed draft had appeared since 14 Oct.
+- **Unattended runs no longer auto-decline connector calls (FIX-D, reworked in review on 29 Oct).** The original fix added the `mcp__Microsoft_365__*` and `mcp__Atlassian_MCP__*` names to `settings.json`. Review found that a plugin's `settings.json` keeps only `agent` and `subagentStatusLine` on install, so no permission list the plugin ever shipped reached a lawyer's machine. `settings.json` is removed. The plugin now ships a `PreToolUse` hook (`hooks/hooks.json`, see `hooks/README.md`) that allows the Copilot's read, draft-create, Jira and n8n tools by name under any server prefix (`mcp__atlassian__`, `mcp__Atlassian_MCP__`, `mcp__claude_ai_...__`, `mcp__plugin_mypos-legal-copilot_...__`, UUID-prefixed Cowork connectors). Send tools, direct SharePoint writes and the generic Atlassian `execute*` tools are never allowed; user and organisation `deny` / `ask` rules still win. `docs/permissions-snippet.json` is the optional explicit list for a user's own `.claude/settings.local.json`. `/setup-copilot` Step 4 checks that the smoke test ran without prompts.
+- **Prompt templates (FIX-E).** `docs/prompt-templates.md` adds 1b (attachments + NDA guard + Outlook draft line) and 6 (weekly health check). `/triage` Step 4 also says to use `anthropic-skills:legal-triage-nda`, never `legal:triage-nda`.
+
+### Review fixes (29 Oct 2026, before merge)
+- **Business reviewer `revise` on a two-touch ticket is no longer reported as `approve`.** `/triage` Step 6 reconciled "Devil's advocate approve + business revise" as `approve` in every case, which let an over-budget draft through. On a two-touch-eligible ticket that verdict now stays `revise`, sets `human_review_required`, and the AI Triage comment says the two-touch budget could not be met.
+- **Size rule for skipped attachments is image-only.** The 20 KB rule now applies to image files only (`image001.png` etc., `.png` / `.jpg` / `.jpeg` / `.gif`, `image/*`); a short `.docx` or `.pdf` is never skipped because of its size. Same wording in `/triage` Step 8, `/file-to-sharepoint` and `/reply-and-close`.
+- **Inline limit is 6 MB raw.** The workflow's ~8 MB limit is on the base64-encoded document; base64 adds a third. The filer also caps a call at the workflow's 10 documents (draft first, then final email / comments, then attachments smallest first) and reports the rest in `attachments_not_filed` instead of getting a 422.
+- **Policy files are checked, not just copied.** `sla-policy.md`, `two-touch-rule.md` and `config.md` carry a `Policy version:` line; `/setup-copilot` Step 3 item 8 reads the SharePoint `_knowledge` copies and reports missing or stale ones; prompt template 6 (weekly health check) compares them too.
+- **Intake-form answers land on the same ticket.** The spec had the form create a second ticket, which would have undercounted touches by one (touch 1 on the original, touch 2 on the new ticket) and left the original open. `docs/n8n-intake-form.md` now has a comment-mode branch: the Copilot's link prefills the ticket key, the answers are posted as an `Intake-Form:` comment on that ticket with the `intake:form` label, and `/triage` Step 3 treats that comment as the requester's reply and re-triages. A new ticket is created only when no ticket is named. Same wording in `knowledge/two-touch-rule.md`, `knowledge/config.md`, `/triage` Steps 2 and 4b and `/reply-and-close` Step 4b.
+- **Kept due dates are explained.** `/triage` Step 10 and 11 print "existing date kept; policy would set ..." when `jira-fields-and-flags` returns `due_date_kept`.
+- **Jira tool names by suffix.** `/triage` Step 10, `/reply-and-close` Step 8, `/triage-board` 2b and `/setup-copilot` no longer hard-code `addCommentToJiraIssue` / `getTransitionsForJiraIssue`; the newer Atlassian connector exposes `addOrEditJiraIssueComment` and no transitions lookup (pass the transition by name).
+- Smaller: `sla-policy.md` states the P1-P4 to Highest/High/Medium/Low/Lowest mapping and the `sla_days` cap is 180 (the longest tier) in the policy, `jira-fields-and-flags` and `jira-auto-assign`; `config.md` no longer ends mid-sentence; `triage-reviewer` and `/triage` Step 4b say that on `full_track` tickets `questions_to_ask` is the uncapped missing-information list; `/legal-report` always prints the two-touch line; `/triage-inbox` names Step 4b; `commands/setup-copilot.md` had 2 KB of NUL padding at the end since 14 Oct, removed.
+
+### Not in this release
+- The published `anthropic-skills:legal-triage-*` skills still print their old SLA suggestion, and `legal-triage-project` still defines SLA as time to the scoping call. They are outside this repo; the policy file overrides them for due dates.
+
+### Plugin version
+- Bumped to **0.5.0**. Run `/plugin update`, copy `sla-policy.md`, `two-touch-rule.md` and `config.md` (each with its `Policy version: 0.5.0` line) to the SharePoint `_knowledge` folder so scheduled runs that cannot read the plugin folder pick them up, then run `/setup-copilot` to confirm the copies and that the permission hook is active.
+
+---
+
 ## [0.4.9] - 2026-10-13
 
 AIRD project removed from scope.

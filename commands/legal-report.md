@@ -48,6 +48,8 @@ See `skills/legal-productivity-report/SKILL.md` Step 6 for the format. Always in
 - Top three slippers (key, assignee, days overdue)
 - AT RISK / OVERLOADED / OK roll-up
 - Count of unassigned tickets (routing gap)
+- Closed within 2 touches: X% of N eligible tickets, with the breached count (skill section 1d)
+- Intake form (beta) share and its two-touch rate, when any `intake:form` ticket closed in the range
 - SharePoint URL of the filed docx
 - SharePoint URL of the updated memory file
 

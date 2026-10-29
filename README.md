@@ -51,6 +51,8 @@ You should only need to do this once on each machine you install on.
 
 ### Triage a single ticket on demand
 
+> **New in 0.5.0.** Due dates come from one risk-based SLA policy (`knowledge/sla-policy.md`): 14 days for non-critical tickets, 3 to 6 months for projects, tighter only for critical matters or hard external deadlines. Non-critical drafts aim to close in **two interactions** with the requester (`knowledge/two-touch-rule.md`): at most 3 questions, everything else stated as an assumption. Intake forms for contract and regulatory requests are specified in `docs/n8n-intake-form.md` (beta, not live yet). Unattended runs are no longer blocked by permission prompts: the plugin ships a permission hook (`hooks/hooks.json`) that allows its read, draft-create, Jira and n8n tools, and `/setup-copilot` now checks that the policy files scheduled runs fall back to are on SharePoint at the current version.
+
 > **New in 0.4.0.** Every triage now runs a **three-pass review** -- the legal-triage skill drafts, the Devil's advocate stress-tests, and the business reviewer reconciles the two from a commercial / partner-relationship angle. The Copilot also **auto-assigns the ticket** to the right lawyer (rules in `knowledge/team-routing.md`) and **sets Jira priority, due date, labels and the Flagged field directly on the ticket** -- those facts are no longer buried inside the comment thread.
 
 ### Triage a single ticket on demand

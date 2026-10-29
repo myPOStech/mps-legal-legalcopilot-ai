@@ -1,5 +1,7 @@
 # Configuration
 
+Policy version: 0.5.0 (ships with plugin 0.5.0; the copy in the SharePoint `_knowledge` folder must carry the same version line, `/setup-copilot` checks it)
+
 What the team has configured for the Legal Copilot. This file ships with the plugin and documents the canonical settings; the live shared state lives on SharePoint at `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`.
 
 ## Jira board
@@ -28,4 +30,19 @@ All SharePoint writes are routed through the team's n8n `Legal Copilot` workflow
 - **Required body fields:** `case_id`, `case_folder`, `documents` (array of `{filename, content_base64, mime_type}`), `memory_instructions`
 - **What it does:** creates `myPOS Legal/{case_folder}/{case_id}/`, uploads each document, downloads + appends + re-uploads the memory file, returns a JSON summary
 
-The Microsoft 365 MCP is still used for SharePoint **reads** (the read path i
+The Microsoft 365 MCP is still used for SharePoint **reads** (the read path is `sharepoint_search` followed by `read_resource`, as in `/triage` Step 1); every write goes through the n8n workflow above.
+
+## SLA policy and two-touch rule
+
+- **SLA tiers and due dates:** `knowledge/sla-policy.md` (single source; the legal-triage skills' own SLA suggestions are not used for due dates)
+- **Two-touch rule and resolution paths:** `knowledge/two-touch-rule.md`
+
+## Intake forms (beta)
+
+Spec: `docs/n8n-intake-form.md`. `/triage` only sends a form link when the URL below is not `TBD`.
+
+- **Contract review form URL:** `TBD`
+- **Regulatory question form URL:** `TBD`
+- **n8n workflow:** `Legal Intake` (`FicMGfmDaJxaXBym`), unpublished draft
+- **Mode:** when the form names an existing `LEGAL-*` ticket (the Copilot's link prefills it), the answers are posted as a comment on that ticket and the Copilot re-triages it; a new ticket is created only when no ticket is named
+- **Labels added by the form:** `intake:form`, `intake:contract-review-v1` / `intake:regulatory-question-v1` (on the ticket the answers landed on)

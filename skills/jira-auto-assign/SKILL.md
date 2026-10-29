@@ -20,7 +20,7 @@ Caller passes a structured dict:
   "human_review_required": true | false,
   "risk_flags": ["regulator", "claim", ...],
   "priority": "Highest" | "High" | "Medium" | "Low" | "Lowest",
-  "sla_days": 1-90
+  "sla_days": 1-180
 }
 ```
 

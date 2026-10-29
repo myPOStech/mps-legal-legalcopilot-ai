@@ -42,6 +42,8 @@ Plus the bundled seeds in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
 - `feedback-log.md`
 - `sharepoint-map.md`
 - `team-routing.md` (consumed by `jira-auto-assign`)
+- `sla-policy.md` and `two-touch-rule.md` (applied in `/triage` Step 4b)
+- `config.md` (intake form URLs)
 
 **Fallbacks (in order):** SharePoint memory read fails -> seeds only, surface a warning. Bundled seeds unreadable (app-internal path; common in scheduled runs) -> fetch them from the SharePoint `_knowledge` folder with the same search + read pattern. Missing there too -> conservative defaults, flag in Phase 6.
 
@@ -80,8 +82,8 @@ The first matching comment is the **last legal-team reply**. Its author is the *
 If a `last_replier` exists for a ticket:
 
 1. If `status == "To Do"`:
-   - `mcp__atlassian__getTransitionsForJiraIssue` to find the transition ID for `In Progress`.
-   - `mcp__atlassian__transitionJiraIssue` to move the ticket from To Do to In Progress.
+   - If a tool with suffix `getTransitionsForJiraIssue` exists, use it to find the transition ID for `In Progress`; otherwise pass the transition by name (the newer Atlassian connector has no transitions-lookup tool).
+   - The tool with suffix `transitionJiraIssue` to move the ticket from To Do to In Progress.
 2. If `current_assignee != last_replier` (re-check AFTER the transition):
    - Invoke `jira-auto-assign` with `force_reassign: true` and `override_account_id: {last_replier.account_id}` (the skill respects the override and skips its normal expertise-map logic). Record the rule applied as `last_replier`.
 3. **Verify:** re-read the assignee field after the transition + assignment. The LEGAL project's "Start Progress" post-function reassigns the ticket to the acting account (observed overwriting correct owners 6 times in June 2026). If the assignee is not the intended one, set it again and note the correction in Phase 6.
@@ -110,7 +112,7 @@ For each remaining To-Do ticket (max 3 per sweep), follow `/triage`'s Steps 2-10
 1. Fetch ticket (one at a time, compact format)
 2. Dedupe
 3. Classify with the matching legal-triage skill, invoked by its full published name `anthropic-skills:legal-triage-{type}` (never the `mypos-legal-copilot:` stub; see `/triage` Step 4); the Devil's advocate pass uses `anthropic-skills:devils-advocate`
-4. Apply risk gates
+4. Apply risk gates, then set the SLA and pick a resolution path (`/triage` Step 4b: `sla-policy.md` + `two-touch-rule.md`)
 5. Devil's advocate review (`triage-reviewer` subagent)
 6. Business reviewer (`business-reviewer` subagent)
 7. Auto-assign (`jira-auto-assign`) + set fields (`jira-fields-and-flags`)
@@ -142,12 +144,12 @@ JQL: project = LEGAL AND statusCategory != Done ORDER BY created ASC
 
 (compact fields only)
 
-For each open ticket, compare `now() - created` against the SLA. If >75% elapsed AND no lawyer response since the AI triage comment AND no SLA Warning already posted for the current SLA window, post:
+For each open ticket with a `duedate`, the SLA window is `duedate - created` (this already reflects `knowledge/sla-policy.md`, the external-deadline rule and any manual change by a lawyer). Skip tickets with no `duedate`. Read the tier from the ticket's `sla:{tier}` label (`unknown` if absent). If >75% of the window has elapsed AND no lawyer response since the AI triage comment AND no SLA Warning already posted for the current SLA window, post:
 
 ```markdown
 **SLA Warning**
 
-This ticket was created {N} days ago. SLA for {priority} priority is {sla_days} days.
+This ticket was created {N} days ago. SLA tier {sla_tier}: due {duedate} ({window_days}-day window).
 {remaining_days} day(s) remaining before SLA breach.
 
 *Please review the AI draft in the AI Triage comment above (and the SharePoint case folder), then run `/reply-and-close` or escalate.*
@@ -187,6 +189,10 @@ Processed (new triage): {total} (cap 3/sweep; deferred: {list})
     {list of {ticket_key, error}}
   Auto-assign failures (routing gap): {count}
     {list of {ticket_key, reason}}
+  Outlook drafts (one line per triaged ticket, see /triage Step 9):
+    {ticket_key}: Outlook draft: created (subject ...) | NOT created, reason: ...
+  Attachments not filed:
+    {list of {ticket_key, filename, reason}}
 
 Overload signals:
   {list of {assignee, overdue_count}} (>= 3 overdue tickets each)

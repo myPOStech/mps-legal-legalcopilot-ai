@@ -35,7 +35,7 @@ The caller (`/triage`, `/file-to-sharepoint`, `/reply-and-close`, `/triage-board
 | `matter_type` | yes | One of the 10 matter types (NDA, contract review, regulatory question, corporate change, project, KYC support, GTCs, materials review, claims, inspection support). Maps to the matter-type folder name. |
 | `documents` | yes* | Binary/base64 documents. List of `{filename, content_base64, mime_type}` (IANA type, e.g. `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `application/pdf`, `text/html`). This is the literal shape the n8n workflow expects. At least one of `documents`, `text_documents`, or `documents_from_jira` is required. |
 | `text_documents` | optional | Plain-text/markdown/html bodies. List of `{filename, content_text, mime_type}`. The workflow base64-encodes these server-side and accepts either `content_text` or `content` as the field name. |
-| `documents_from_jira` | optional | Attachments the workflow fetches server-side. List of `{filename, jira_attachment_url, mime_type}`. Removes the need to inline large attachments as base64. |
+| `documents_from_jira` | optional | Attachments the workflow fetches server-side. List of `{filename, jira_attachment_url, mime_type}`. Only for attachments over 6 MB raw (see Step 3, item 4): the n8n SSRF guard blocks most Jira attachment fetches, and a blocked fetch is reported as `fetch_failed`, not filed. |
 | `review_findings` | optional | Devil's advocate findings. Embedded as anchored Word comments inside the draft `.docx` BEFORE base64-encoding. List of `{severity, location, issue, suggested_edit}`. |
 | `counterparty` | optional | If known, used in filenames; otherwise derived from the ticket. |
 | `memory_notes` | optional | Free-text notes the caller wants appended to the shared memory file. The skill builds the final `memory_instructions` markdown block from these + the structured triage metadata. |
@@ -54,6 +54,7 @@ Returns:
 | `documents_filed` | List of `{filename, sharepoint_url, status}` for each uploaded file. |
 | `memory_file_url` | The SharePoint URL of the shared memory file. |
 | `memory_file_updated` | Boolean. True when the workflow successfully re-uploaded the memory file. |
+| `attachments_not_filed` | List of `{filename, reason}` for attachments skipped as signature / inline images, too large to inline, or `fetch_failed` in the workflow. Callers print it as `Attachments not filed: ...` in the Jira comment. Empty list when everything was filed. |
 | `chat_summary` | A multi-line string ready to print to chat (and to embed in the Jira comment) summarising what was filed and where. |
 | `error` | When `success: false`, a short machine-readable error code (e.g., `document_too_large_to_inline`, `workflow_http_error`, `workflow_rejected_payload`, `n8n_mcp_unavailable`). |
 
@@ -128,7 +129,12 @@ For each file in the input list:
 
 3. **final_email** -- locate the sent message via `outlook_email_search` (folder `Sent Items`), then `read_resource` for the full content. Render headers (from/to/cc/date/subject) plus the body as a single `.html` string and send it in `text_documents` (`{filename, content_text, mime_type: "text/html"}`), no base64 needed. Raw `.eml` MIME is NOT retrievable through the connector -- do not pretend otherwise.
 
-4. **attachment** -- do NOT download and inline it. Put every Jira attachment in `documents_from_jira` as `{filename, jira_attachment_url, mime_type}`; the workflow fetches the bytes server-side with its own Jira credential. This removes the attachment size problem entirely.
+4. **attachment** --
+   - **Skip** e-mail signature and inline images, by type only: filenames matching `image\d*\.(png|jpg|jpeg|gif)` (e.g. `image001.png`), or an image file (`.png`, `.jpg`, `.jpeg`, `.gif`, or MIME `image/*`) smaller than 20 KB. **Never skip a non-image file because of its size**: a short `.docx` or `.pdf` is often under 20 KB and is a real document. Add each skipped image to `attachments_not_filed` with reason `signature/inline image`.
+   - **Up to 6 MB (raw bytes):** download the attachment (Atlassian connector) and send it in `documents` as base64, like the draft. Base64 adds about a third, which keeps the encoded document under the workflow's ~8 MB limit.
+   - **Over 6 MB:** put it in `documents_from_jira` as `{filename, jira_attachment_url, mime_type}`. Expect the workflow to report it as `fetch_failed`: n8n Cloud's SSRF guard blocks Jira attachment hosts (executions 25235 and 26726, 12 and 14 Oct 2026). Since 27 Oct 2026 a blocked fetch no longer aborts the filing (`docs/n8n-legal-copilot-workflow.md`).
+   - **Document cap:** the workflow accepts at most 10 documents per call (`documents`, `text_documents` and `documents_from_jira` together). Order them draft first, then `final_email` / `comments`, then attachments smallest first. Anything beyond the tenth goes to `attachments_not_filed` with reason `over the 10-document limit; file with /file-to-sharepoint`. Never split one filing into two calls: each call appends a memory entry.
+   - If an attachment cannot be downloaded, add it to `attachments_not_filed` with the reason and carry on. **A failed attachment must never stop the filing of the draft `.docx`.**
 
 5. For the draft and comments `.docx`: read the resulting bytes from disk, base64-encode, and pair with the IANA `mime_type` in `documents`.
 
@@ -171,7 +177,7 @@ If `memory_notes` is empty and `triage_metadata` is empty, the body is just `Fil
 
 Use the n8n MCP `execute_workflow` tool. **This is the ONLY transport.** Do NOT fall back to `curl` against the webhook -- the sandbox egress proxy blocks it (403 on CONNECT, observed 2026-06-02); the curl path can never work from a Cowork session. If the n8n MCP is unavailable in the session, return `success: false` with `error: "n8n_mcp_unavailable"` and stop.
 
-**Payload shape.** Allowed body keys: `case_id`, `case_folder`, `documents`, `text_documents`, `documents_from_jira`, `memory_instructions`. Max 10 documents in total per call; each base64 document max ~8 MB.
+**Payload shape.** Allowed body keys: `case_id`, `case_folder`, `documents`, `text_documents`, `documents_from_jira`, `memory_instructions`. Max 10 documents in total per call; each document max ~8 MB once base64-encoded (about 6 MB of raw bytes).
 
 ```json
 {
@@ -225,7 +231,7 @@ execute_workflow(
 
 Wait for the response. Production runs respond synchronously through the workflow's `Respond to Webhook` node.
 
-> `text_documents` and `documents_from_jira` are live (workflow `Resume State` node, verified 2 Oct 2026). Prefer `documents_from_jira` for every Jira attachment; inline base64 only for files Claude builds (the draft and comments `.docx`). The PDF in the `documents` example above is illustrative only.
+> `text_documents` and `documents_from_jira` are live (workflow `Resume State` node, verified 2 Oct 2026). Send attachments up to 6 MB raw inline in `documents`, as the PDF in the example above shows. `documents_from_jira` is only for attachments over 6 MB, and the n8n SSRF guard usually blocks those fetches (Step 3, item 4).
 
 ### Known-good caller pattern
 
@@ -277,6 +283,10 @@ The workflow returns:
 
 Check `documents_filed[].status` individually: `success_but_empty` (length 0) counts as a FAILURE for that document -- treat the call as `success: false` and say which file uploaded empty.
 
+`fetch_failed` (a `documents_from_jira` attachment the workflow could not download) is NOT a failure of the call. Add it to `attachments_not_filed` with the workflow's `reason` and keep `success` as it is for the other documents.
+
+**Empty case folder check.** If the response files 0 documents although the call sent at least one (`documents_filed` empty, or every entry failed), say so in `chat_summary` and retry once with `documents` only: drop `documents_from_jira`, keep the draft and the inline attachments. The empty `LEGAL-5886` and `LEGAL-5915` folders of 12 and 14 Oct 2026 came from runs that aborted on a Jira attachment fetch. If the retry also files nothing, return `success: false`.
+
 Build the skill's return object from this:
 
 ```json
@@ -288,6 +298,7 @@ Build the skill's return object from this:
   "documents_filed": ["...passthrough..."],
   "memory_file_url": "https://mypos0.sharepoint.com/sites/legal/Shared Documents/myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md",
   "memory_file_updated": true,
+  "attachments_not_filed": [{"filename": "image001.png", "reason": "signature/inline image"}],
   "chat_summary": "<the workflow's `message` field, lightly reformatted>"
 }
 ```
@@ -315,4 +326,5 @@ The caller pipes `chat_summary` straight into:
 - **`memory_instructions` is a markdown STRING, never a JSON object.**
 - **`case_folder` MUST be the matter-type folder name only** (e.g., `Regulatory Questions`, `Claims`, `NDAs`) -- NOT `Regulatory Questions/LEGAL-5261`. The workflow concatenates `case_id` itself; passing the case id twice produces an ugly `.../Claims/LEGAL-4912/LEGAL-4912/...` path (see execution 6727).
 - **Memory file path is `myPOS Legal/...`, not `myPOS Legal 1/...`** -- confirmed by the live workflow's `Prepare State` node. The `myPOS Legal 1/` copy is the old private path (reachable only by the workflow owner); never read or cite it. Any documentation referencing the old private path is stale.
+- **NEVER let an attachment stop the draft from being filed.** Skip signature / inline images (image files only, never a non-image on size), inline real attachments up to 6 MB raw, report everything not filed in `attachments_not_filed`.
 - **Treat `success_but_empty` uploads as failures** for the affected document (that is how the 12-byte and 13-byte stubs of 2026-05-27 and 2026-06-03 slipped through).

@@ -13,6 +13,17 @@ If filing fails, stop and tell me; do not post the comment.
 
 Why: business-reviewer otherwise passes `is_strategic_partner: unknown` and produces a context_gap you then answer in a second round.
 
+## 1b. Single ticket triage (attachments and NDA guard)
+
+```
+/triage LEGAL-{NNNN}
+Ignore signature images (image001.png etc.). File only: the draft .docx and these attachments: {names or "none"}.
+For NDAs use anthropic-skills:legal-triage-nda, not legal:triage-nda.
+End the summary with the line "Outlook draft: created / NOT created, reason".
+```
+
+Why (weekly review of 23 Oct 2026): signature images sent as Jira attachments made two filings fail on the n8n SSRF guard and left empty case folders; two NDA skills can trigger on "NDA"; Outlook drafts stopped after 14 Oct without any run saying why.
+
 ## 2. Contract review / mark-up
 
 ```
@@ -48,3 +59,11 @@ Before starting, confirm: M365 connected? n8n Legal Copilot reachable? Jira reac
 ```
 
 Use as the first line of any multi-step copilot run; it turns 20-minute failures into 1-minute ones.
+
+## 6. Weekly health check
+
+```
+Run the Legal Copilot health check: plugin version vs GitHub, M365 get_granted_scopes, n8n last 7 days of Legal Copilot executions (errors only), newest [AI DRAFT LEGAL-] draft date, Jira read, and the "Policy version:" line of sla-policy.md, two-touch-rule.md and config.md on SharePoint _knowledge vs the plugin copies. Read-only. Report only what changed since last week.
+```
+
+Why: the 23 Oct review found version drift (0.4.8 installed, 0.4.9 on GitHub) and a 9-day gap in Outlook drafts that a quick weekly check would have caught. Since 0.5.0 the same drift can happen between the plugin's policy files and their SharePoint copies, which the scheduled sweep falls back to.
