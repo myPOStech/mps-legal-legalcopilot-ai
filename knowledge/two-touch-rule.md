@@ -56,7 +56,7 @@ For `contract_review` and `regulatory_question` tickets on the `one_question_rou
 - the form URL in `config.md` is not `TBD`,
 - 3 or more blocking items are missing (fewer than that: just ask them in the draft),
 - the ticket is two-touch eligible, has no risk flag and no `human_review_required`,
-- the ticket did not come from the form and carries no `intake:form-sent` label or `Intake-Invite:` comment.
+- the form answers have not already arrived (no `intake:form` label, no `Intake-Form:` comment) and the ticket carries no `intake:form-sent` label or `Intake-Invite:` comment.
 
 The link carries the ticket key, so the submission comes back as an `Intake-Form:` **comment on the same ticket** (plus the `intake:form` label and any uploaded files). No second ticket is created. The Copilot re-triages the ticket with the new facts (`/triage` Step 3 treats that comment as the requester's reply); the answer is touch 2, counted on the same ticket as touch 1. `/reply-and-close` counts the invite as one touch from the `intake:form-sent` label.
 

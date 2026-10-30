@@ -59,11 +59,9 @@ Plus the bundled seed knowledge in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
 
 **Email pasted:** use the subject, body, and sender directly.
 
-**Intake form submissions** (`docs/n8n-intake-form.md`) arrive in one of two places:
-- as the ticket **description** starting with an `Intake-Form:` line (the requester came to the form on their own; new-ticket mode), or
-- as a **comment** starting with an `Intake-Form:` line on a ticket that already has an AI Triage comment (the automatic intake invite went out as touch 1; comment mode). Read the original description and the form comment together.
+**Intake form submissions** (`docs/n8n-intake-form.md`) arrive as a **comment** starting with an `Intake-Form:` line on a ticket that already has an AI Triage comment (the automatic intake invite went out as touch 1). The form does not ask who the requester is: they are the requester of the original ticket, so read the original description and the form comment together. (A few tickets from the first beta day, 29 Oct 2026, carry the block in the ticket description instead; read it the same way.)
 
-In both cases read the labelled fields as given facts. Do not ask the requester again for anything the form already answers; a form answer of `Not sure` counts as a gap to assume or ask about in Step 4b. If the block says `Existing-Ticket-Given: {key} (not found)`, mention it in the Step 10 comment so the lawyer can link by hand.
+Read the labelled fields as given facts. Do not ask the requester again for anything the form already answers; a form answer of `Not sure` counts as a gap to assume or ask about in Step 4b.
 
 **Attachment gate:** if the ticket's substance lives in an attachment (scanned letter, PDF) and its text cannot be extracted from Jira in this session, STOP and tell the lawyer exactly which file to attach in chat. Do not classify from the summary alone.
 

@@ -1,6 +1,6 @@
 # n8n intake forms (beta)
 
-**Status: built, comment mode live-tested on 29 Oct 2026; automatic invite trigger added 30 Oct 2026 (draft until published, Outlook credential pending).** n8n workflow `Legal Intake` (`FicMGfmDaJxaXBym`), with raw submissions logged to the data table `legal_intake_submissions`. The forms are open links (no login, decided 30 Oct 2026); a Jira Cloud credential sits on the Jira calls. The production URLs are in `knowledge/config.md` (section "Intake forms (beta)"). From plugin 0.5.2 the Copilot does not put the form link in a draft: on the `one_question_round` path it calls the workflow's invite trigger, which emails the requester the fixed invitation (see "How the invite is sent"). While the workflow version with the invite trigger is unpublished, the call fails and `/triage` falls back to asking its (max 3) questions.
+**Status: built, comment mode live-tested on 29 Oct 2026; automatic invite trigger added 30 Oct 2026 (draft until published, Outlook credential pending).** n8n workflow `Legal Intake` (`FicMGfmDaJxaXBym`), with raw submissions logged to the data table `legal_intake_submissions`. The forms are open links with no login and no identity fields (30 Oct 2026): they only answer an invitation, so the ticket number is required and the requester is the person on that ticket. A Jira Cloud credential sits on the Jira calls. The production URLs are in `knowledge/config.md` (section "Intake forms (beta)"). From plugin 0.5.2 the Copilot does not put the form link in a draft: on the `one_question_round` path it calls the workflow's invite trigger, which emails the requester the fixed invitation (see "How the invite is sent"). While the workflow version with the invite trigger is unpublished, the call fails and `/triage` falls back to asking its (max 3) questions.
 
 ## Why
 
@@ -17,18 +17,18 @@ Contract review and regulatory question requests arrive by email with too little
 One n8n workflow, `Legal Intake`, with two form triggers:
 
 ```
-[n8n Form Trigger: Contract review]  --\                                            /-- existing LEGAL ticket named --> [Jira: add comment + labels] --> [Jira: add attachments to it] --\
-                                        >-- [Code: validate + build block] --> [IF] <                                                                                                   >-- [Form ending page]
-[n8n Form Trigger: Regulatory question] --/                                            \-- no ticket named -----------> [Jira: create issue]          --> [Jira: add attachments]      --/
+[n8n Form Trigger: Contract review]  --\                                      /-- ticket found ------> [Jira: add comment + labels] --> [Jira: add attachments] --> [Ending page: answers added]
+                                        >-- [Build block] --> [IF ticket number] <
+[n8n Form Trigger: Regulatory question] --/                                      \-- none / not found --> [Ending page: "could not match your ticket", nothing saved]
 ```
 
-1. **Form Trigger** (one per form). Fields below. Access model changed on 30 Oct 2026: open links, no login (the shared basic-auth login was judged too much friction). What limits abuse: the links are only ever sent by the automatic invite or published on the internal Legal SharePoint page, the workflow rejects any requester address that is not `@mypos.com`, and `ignoreBots` is on. An office / VPN IP allow-list (`ipWhitelist` option on the trigger) can be added later if IT provides the ranges.
-2. **Code / validate.** Reject submissions whose requester email is not `@mypos.com` (show an error page). Trim free text. Build the block below. Read the `Existing ticket (if any)` field; the Copilot's own link prefills it with the ticket key (see "How the invite is sent"), so for a redirected requester it is already filled.
-3. **IF an existing `LEGAL-*` ticket is named and exists: comment mode.** Post the block as a **comment on that ticket**, add the labels `intake:form` and `intake:{form-id}` (e.g. `intake:contract-review-v1`) to it, and add every uploaded file to that ticket. No new ticket. This keeps one ticket per matter, so the two-touch count and the SLA stay on the ticket the requester already knows.
-4. **ELSE: new-ticket mode.** Project `LEGAL`, issue type `Task`, summary `[{form}] {short title}`, description = the block below, labels `intake:form` and `intake:{form-id}`, attachments on the new ticket. If the requester typed a ticket key that does not resolve, treat as new-ticket mode and write `Existing-Ticket-Given: {text} (not found)` in the block so the lawyer can link by hand. Use a service-account Jira credential in both modes, the same way the `Legal Copilot` filing workflow uses a service account for SharePoint.
-5. **Ending page.** Comment mode: "Thanks. Your answers were added to {LEGAL-key}; Legal will come back to you on that ticket." New-ticket mode: "Thanks. Your request is {LEGAL-key}. Legal will send you a first response within 2 business days." (the `standard` tier first-response target in `knowledge/sla-policy.md`).
+1. **Form Trigger** (one per form). Fields below. Access model (30 Oct 2026): open links, no login, and no identity fields. The form does not ask who the requester is. It only answers an invitation: the ticket number is required, the invitation link prefills it, and the requester is the person on that ticket. What limits abuse: the links only go out in the automatic invite, nothing is saved unless the number matches an existing LEGAL ticket, and `ignoreBots` is on. An office / VPN IP allow-list (`ipWhitelist` option on the trigger) can be added later if IT provides the ranges.
+2. **Build block.** Trim free text, build the block below, read the ticket number from the `existing_ticket` field (`LEGAL-6014` or just `6014` both work).
+3. **IF the ticket exists: comment mode (the only mode).** Post the block as a **comment on that ticket**, add the labels `intake:form` and `intake:{form-id}` (e.g. `intake:contract-review-v1`) to it, and add every uploaded file to that ticket. Never a new ticket: one ticket per matter, so the two-touch count and the SLA stay on the ticket the requester already knows. Use a service-account Jira credential, the same way the `Legal Copilot` filing workflow uses a service account for SharePoint.
+4. **ELSE (no number recognised, or Jira does not know it): ending page "We could not match your ticket"**, nothing saved. The page names the number typed and asks the requester to open the form from the link in the invitation email or to reply to that email. Until 30 Oct 2026 this case created a new ticket; without identity fields an anonymous ticket would be useless, so that path was removed.
+5. **Ending page (success).** "Thanks, your answers are on the ticket. Your answers were added to {LEGAL-key}; Legal will come back to you on that ticket."
 
-The Copilot does not need a new trigger. In comment mode the ticket is still `To Do`, so the 08:00 `/triage-board` sweep picks it up and `/triage` Step 3 treats the `Intake-Form:` comment as the requester's reply and re-triages with the new facts. In new-ticket mode the sweep picks up the new To-Do ticket like any other.
+The Copilot does not need a new trigger. The ticket is still `To Do`, so the 08:00 `/triage-board` sweep picks it up and `/triage` Step 3 treats the `Intake-Form:` comment as the requester's reply and re-triages with the new facts.
 
 ## How the invite is sent (automatic since 30 Oct 2026)
 
@@ -47,20 +47,19 @@ To this end, we kindly ask that you fill the intake form found here: {form URL}?
 
 Workflow steps on the invite branch: `Validate invite` (key `LEGAL-NNNN`, requester `@mypos.com`, form name; builds the link, subject and body) -> `Read ticket labels` (Jira) -> `Check invite guards` -> `Skip invite?` -> `Send intake invite` (Microsoft Outlook node, the Legal mailbox's credential) -> `Comment: invite sent` (an `Intake-Invite: sent` comment with Sent-To, Sent-At, Form, Link) -> `Label: form-sent` (adds `intake:form-sent`) -> `Respond invite sent`.
 
-Guards (the workflow refuses, answering `{success:true, skipped}`): label `intake:form-sent` already on the ticket, label `intake:form` (the ticket came from the form), or the ticket is done. Errors: 400 `invite_rejected` (bad input), 404 `ticket_not_found`, 502 `invite_send_failed`. On any non-success answer `/triage` falls back to asking its questions in the draft.
+Guards (the workflow refuses, answering `{success:true, skipped: already_sent | answers_already_received | ticket_done}`): label `intake:form-sent` already on the ticket, label `intake:form` (the form answers already arrived), or the ticket is done. Errors: 400 `invite_rejected` (bad input), 404 `ticket_not_found`, 502 `invite_send_failed`. On any non-success answer `/triage` falls back to asking its questions in the draft.
 
 The link prefills the form: n8n fills a field from a query parameter whose name matches the field **name** (`existing_ticket`), not the label, and only on the production `/form/` URL, never on the `/form-test/` URL (n8n docs, Form Trigger, "Prefill form fields with query parameters").
 
 ## Description block (the contract with `/triage`)
 
-`/triage` Step 2 recognises a form submission by the first line, whether it is a ticket description (new-ticket mode) or a comment (comment mode). Keep this format stable; bump the version (`v2`) if fields change.
+`/triage` Step 2 recognises a form submission by the first line of the comment. Keep this format stable; bump the version (`v2`) if fields change. (Tickets from the first beta day, 29 Oct 2026, may carry the block in the ticket description instead, with `Submitted-By:` and `Team:` lines and `Mode: new-ticket`; `/triage` reads those the same way.)
 
 ```
 Intake-Form: contract-review v1
-Submitted-By: {name} <{email}>
 Submitted-At: {ISO timestamp}
-Mode: comment | new-ticket
-Existing-Ticket-Given: {text the requester typed, or "none"; "(not found)" appended when it did not resolve}
+Mode: comment
+Existing-Ticket-Given: {text the requester typed}
 ---
 {Field label}: {answer}
 {Field label}: {answer}
@@ -77,7 +76,6 @@ An unanswered optional field is written as `Not sure`, never left out, so `/tria
 
 | Field | Type | Required |
 |---|---|---|
-| Your name, your myPOS email, your team | text | yes |
 | myPOS entity signing | dropdown: the group entity list below, then "Other / not sure" | yes |
 | If you chose Other / not sure: which entity, or what you know | text (`entity_other`) | no |
 | Counterparty name | text | yes |
@@ -88,12 +86,11 @@ An unanswered optional field is written as `Not sure`, never left out, so `/tria
 | Whose template | dropdown (ours / theirs / not sure) | yes |
 | Value band (annual) | dropdown (<EUR 10k, 10-50k, 50-100k, >100k, not sure) | yes |
 | Signing deadline | date | no |
-| What happens if we miss it | text | only if a deadline is given |
 | What you need from Legal | dropdown (full review + redline / specific clauses / sign-off only / negotiation support) | yes |
 | Commercial terms already agreed? | yes / no / partly | yes |
 | Personal data shared or processed? | yes / no / not sure | yes |
 | Business approver | text | no |
-| Existing ticket (if any) | text | no |
+| Your LEGAL ticket number (filled in from the invitation email) | text (`existing_ticket`, prefilled by the link) | yes |
 | Contract file and any earlier version | file upload (multiple) | yes |
 | Anything else we should know | long text | no |
 
@@ -101,7 +98,6 @@ An unanswered optional field is written as `Not sure`, never left out, so `/tria
 
 | Field | Type | Required |
 |---|---|---|
-| Your name, your myPOS email, your team | text | yes |
 | The question, in one sentence | text | yes |
 | myPOS entity concerned | dropdown: the group entity list below, then "Other / not sure" (block line `myPOS entity:`) | yes |
 | If you chose Other / not sure: which entity, or what you know | text (`entity_other`) | no |
@@ -113,7 +109,7 @@ An unanswered optional field is written as `Not sure`, never left out, so `/tria
 | What drives that deadline | text | only if a deadline is given |
 | Has a regulator asked about this? | yes / no | yes |
 | What Compliance has already checked | long text | no |
-| Existing ticket (if any) | text | no |
+| Your LEGAL ticket number (filled in from the invitation email) | text (`existing_ticket`, prefilled by the link) | yes |
 | Supporting documents | file upload (multiple) | no |
 
 "Has a regulator asked about this? = yes" must lead to the `regulator` risk flag at triage, which makes the ticket `critical` and exempt from the two-touch rule.
@@ -168,6 +164,7 @@ The same dropdown on both forms. `myPOS AD` no longer exists as such: it is the 
 - **Production URLs** are in `knowledge/config.md` since plugin 0.5.1.
 - **Upload size:** n8n accepts files up to 200 MiB per field by default (`N8N_FORMDATA_FILE_SIZE_MAX`); the binding limit is Jira's own attachment limit, set by the Jira admin. Typical contract PDFs are well below either.
 - **30 Oct 2026:** invite trigger built (10 nodes) and tested with simulated data: a normal call took the send path and answered `{success:true, sent_to, link, comment_id}`; a call on a ticket already labelled `intake:form-sent` answered `{success:true, skipped:'already_sent'}` without sending. Entity dropdowns updated to the 37-entry group list and "Other" follow-up boxes added (29 Oct).
+- **30 Oct 2026, fields removed (product owner's decision):** "Your name", "Your myPOS email", "Your team" and "What happens if we miss the deadline" dropped from the forms; the invitation already identifies the requester. With no identity on the form, new-ticket mode was removed: the ticket number is required, and a missing or unknown number ends on the "We could not match your ticket" page with nothing saved. Gone from the workflow: the `Is myPOS email?` check and its error page, `Create LEGAL ticket`, `Show ticket number`, `Mark not found`. The data table columns `requester_name` / `requester_email` stay empty from now on. The `Mode:` line of the block is always `comment`.
 
 ## Still open
 

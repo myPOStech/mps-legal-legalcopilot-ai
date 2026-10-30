@@ -51,7 +51,7 @@ You should only need to do this once on each machine you install on.
 
 ### Triage a single ticket on demand
 
-> **New in 0.5.2.** The intake-form invitation is now sent automatically. When a contract review or regulatory question is missing three or more facts, the n8n workflow emails the requester a fixed, clearly labelled AI-generated invitation with the form link and their ticket number, posts "Intake-Invite: sent" on the ticket, and the Copilot waits for the answers before drafting. The forms are open links now (no shared login). Filing failures from SharePoint come back as a clear "sharepoint_upload_failed" error instead of a timeout.
+> **New in 0.5.2.** The intake-form invitation is now sent automatically. When a contract review or regulatory question is missing three or more facts, the n8n workflow emails the requester a fixed, clearly labelled AI-generated invitation with the form link and their ticket number, posts "Intake-Invite: sent" on the ticket, and the Copilot waits for the answers before drafting. The forms are open links now (no shared login) and no longer ask who you are: the ticket number from the invitation identifies the requester. Filing failures from SharePoint come back as a clear "sharepoint_upload_failed" error instead of a timeout.
 
 > **New in 0.5.1.** The intake forms are live for the beta. When a contract review or regulatory question needs three or more facts only the requester has, the Copilot's draft sends them a short form link with their ticket number already filled in (`knowledge/config.md`, "Intake forms (beta)"). Their answers land as a comment on the same ticket and the Copilot re-triages it; no second ticket is created. The forms asked for a shared Legal login (dropped in 0.5.2).
 
