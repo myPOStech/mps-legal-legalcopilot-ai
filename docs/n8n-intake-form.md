@@ -68,7 +68,7 @@ Existing-Ticket-Given: {text the requester typed}
 
 An unanswered optional field is written as `Not sure`, never left out, so `/triage` can tell "not asked" from "unknown".
 
-**"Other" follow-ups.** n8n forms cannot show a field only when "Other" is picked, so every dropdown that offers Other is followed by an always-visible optional text box ("If you chose Other: ..."). The Build nodes append that text to the chosen value on the same block line, so `/triage` reads one line: `Contract type: Other - franchise agreement`, `Our role: Other - licensor`, `myPOS entity signing: Other / not sure - probably the Dutch entity`. When the contract type is Other, the ticket summary uses the free text instead of the word "Other".
+**"Other" follow-ups.** n8n forms cannot show a field only when "Other" is picked, so every dropdown that offers Other is followed by an always-visible optional text box ("If you chose Other: ..."). The Build nodes append that text to the chosen value on the same block line, so `/triage` reads one line: `Contract type: Other - franchise agreement`, `Our role: Other - licensor`, `myPOS entity signing: Other / not sure - probably the Dutch entity`. When the contract type is Other, the ticket summary uses the free text instead of the word "Other". The same limitation applies to the "what are we buying" box (team feedback, 30 Oct 2026): it is always visible, its label says it is for the Customer role only, and the block writes `n/a` for any other role.
 
 ## Fields
 
@@ -81,6 +81,7 @@ An unanswered optional field is written as `Not sure`, never left out, so `/tria
 | Counterparty name | text | yes |
 | Our role | dropdown (customer / supplier / partner / distributor / other) | yes |
 | If you chose Other: our role | text (`our_role_other`) | no |
+| If we are the customer: what are we buying, in a sentence | text (`procurement_description`; block line `What we are procuring (if we are the customer):`, `n/a` when our role is not Customer) | no |
 | Contract type | dropdown (NDA, MSA, SOW, SaaS, partnership, amendment / renewal, other) | yes |
 | If you chose Other: contract type | text (`contract_type_other`) | no |
 | Whose template | dropdown (ours / theirs / not sure) | yes |
@@ -165,6 +166,7 @@ The same dropdown on both forms. `myPOS AD` no longer exists as such: it is the 
 - **Upload size:** n8n accepts files up to 200 MiB per field by default (`N8N_FORMDATA_FILE_SIZE_MAX`); the binding limit is Jira's own attachment limit, set by the Jira admin. Typical contract PDFs are well below either.
 - **30 Oct 2026:** invite trigger built (10 nodes) and tested with simulated data: a normal call took the send path and answered `{success:true, sent_to, link, comment_id}`; a call on a ticket already labelled `intake:form-sent` answered `{success:true, skipped:'already_sent'}` without sending. Entity dropdowns updated to the 37-entry group list and "Other" follow-up boxes added (29 Oct).
 - **30 Oct 2026, fields removed (product owner's decision):** "Your name", "Your myPOS email", "Your team" and "What happens if we miss the deadline" dropped from the forms; the invitation already identifies the requester. With no identity on the form, new-ticket mode was removed: the ticket number is required, and a missing or unknown number ends on the "We could not match your ticket" page with nothing saved. Gone from the workflow: the `Is myPOS email?` check and its error page, `Create LEGAL ticket`, `Show ticket number`, `Mark not found`. The data table columns `requester_name` / `requester_email` stay empty from now on. The `Mode:` line of the block is always `comment`.
+- **30 Oct 2026, field added (team feedback):** contract form gets "If we are the customer: what are we buying, in a sentence" (`procurement_description`, optional), after "Our role". Block line `What we are procuring (if we are the customer):`. The `v1` block format was revised on this day before any production submission, so the version stays `v1`.
 
 ## Still open
 
