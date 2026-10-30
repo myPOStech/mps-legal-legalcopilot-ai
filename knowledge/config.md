@@ -1,6 +1,6 @@
 # Configuration
 
-Policy version: 0.5.1 (ships with plugin 0.5.1; the copy in the SharePoint `_knowledge` folder must carry the same version line, `/setup-copilot` checks it)
+Policy version: 0.5.2 (ships with plugin 0.5.2; the copy in the SharePoint `_knowledge` folder must carry the same version line, `/setup-copilot` checks it)
 
 What the team has configured for the Legal Copilot. This file ships with the plugin and documents the canonical settings; the live shared state lives on SharePoint at `myPOS Legal/Claude skills memory/Copilot/_knowledge/legal_copilot_memory.md`.
 
@@ -39,12 +39,13 @@ The Microsoft 365 MCP is still used for SharePoint **reads** (the read path is `
 
 ## Intake forms (beta)
 
-Spec: `docs/n8n-intake-form.md`. `/triage` only sends a form link when the URL below is not `TBD`.
+Spec: `docs/n8n-intake-form.md`. `/triage` only triggers the invite below when the URL is not `TBD`.
 
 - **Contract review form URL:** `https://myposai.app.n8n.cloud/form/legal-contract-review`
 - **Regulatory question form URL:** `https://myposai.app.n8n.cloud/form/legal-regulatory-question`
 - **Prefill parameter:** append `?existing_ticket=LEGAL-NNNN` to either URL; n8n prefills the "Existing LEGAL ticket" field from the query parameter (keyed on the field name, production URL only). Example: `https://myposai.app.n8n.cloud/form/legal-contract-review?existing_ticket=LEGAL-6014`
-- **Access:** both forms ask for the shared basic-auth login (n8n credential `Legal Intake form login`); the login is published on the internal Legal SharePoint page next to the links, never in a draft to a requester
-- **n8n workflow:** `Legal Intake` (`FicMGfmDaJxaXBym`); comment mode built and live-tested on 29 Oct 2026 (LEGAL-6014 comment mode, LEGAL-6015 not-found fallback)
+- **Access:** open links, no login (decided 30 Oct 2026). Internal use only: the form rejects any requester address that is not `@mypos.com`, and the links are only sent by the invite below or published on the internal Legal SharePoint page
+- **Invite trigger (automatic invitation email):** `POST https://myposai.app.n8n.cloud/webhook/legal-intake-invite`, trigger node `Invite webhook` of the `Legal Intake` workflow, body `{ticket_key, requester_email, form: contract-review | regulatory-question}`. Sends the fixed invitation from the Legal mailbox, posts an `Intake-Invite: sent` comment, adds the label `intake:form-sent`; answers `{success:true, skipped}` when the form was already sent, the ticket came from the form, or the ticket is done. Called by `/triage` Step 4b item 4 only
+- **n8n workflow:** `Legal Intake` (`FicMGfmDaJxaXBym`); comment mode built and live-tested on 29 Oct 2026 (LEGAL-6014 comment mode, LEGAL-6015 not-found fallback); invite trigger added 30 Oct 2026
 - **Mode:** when the form names an existing `LEGAL-*` ticket (the Copilot's link prefills it), the answers are posted as a comment on that ticket and the Copilot re-triages it; a new ticket is created only when no ticket is named or the named key does not exist
 - **Labels added by the form:** `intake:form`, `intake:contract-review-v1` / `intake:regulatory-question-v1` (on the ticket the answers landed on)

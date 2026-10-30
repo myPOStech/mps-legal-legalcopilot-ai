@@ -20,7 +20,7 @@ Tool suffixes: Jira read and write (issue, comment, link, transition, create), O
 
 ## What it never allows
 
-- `outlook_send_mail`, `outlook_send_draft`, `outlook_forward_mail`: the Copilot only creates drafts.
+- `outlook_send_mail`, `outlook_send_draft`, `outlook_forward_mail`: the Copilot never sends from its own tools. The single automatic email (the intake-form invite) is sent by the n8n `Legal Intake` workflow, which the Copilot triggers through `execute_workflow`; that tool is on the list above.
 - `sharepoint_upload_file`, `sharepoint_update_file`, `sharepoint_delete_item`, `sharepoint_move_item`, `sharepoint_rename_item`, `sharepoint_copy_item`: every write goes through the n8n workflow.
 - The generic Atlassian `executeRead` / `executeWrite` / `executeDestructive` tools.
 - Built-in tools (`Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`). If a scheduled run still prompts for those, add them to your own `.claude/settings.local.json` (see `docs/permissions-snippet.json`).

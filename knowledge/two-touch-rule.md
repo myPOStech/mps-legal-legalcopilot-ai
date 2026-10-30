@@ -38,7 +38,7 @@ Every triage picks exactly one `resolution_path`. Prefer the paths higher in the
 |---|---|---|---|
 | `answer_now` | Enough information to answer | The answer | (none) |
 | `answer_on_assumptions` | Gaps exist, but a reasonable assumption fills each one | The answer, with an **Assumptions** block: "We've assumed X. If that's wrong, tell us and we'll adjust." | Only if the requester corrects an assumption |
-| `one_question_round` | No useful answer is possible without facts only the requester has | At most 3 questions, all in one message (or the intake form link, see below) | The answer |
+| `one_question_round` | No useful answer is possible without facts only the requester has | At most 3 questions, all in one message (or the automatic intake invite, see below) | The answer |
 | `full_track` | Exempt tickets only | No limit | No limit |
 
 ### Building touch 1
@@ -50,15 +50,17 @@ Every triage picks exactly one `resolution_path`. Prefer the paths higher in the
 5. No sequential gating. Phrases like "once you confirm X we will review Y and then revert" are not allowed. Say what we will do as soon as we have the answers.
 6. End with one clear ask, or "no action needed from you".
 
-### Intake form redirect (beta)
+### Intake form invite (beta, automatic since 30 Oct 2026)
 
-For `contract_review` and `regulatory_question` tickets on the `one_question_round` path, touch 1 may be the matching intake form link from `knowledge/config.md` (section "Intake forms (beta)") instead of the questions. Use it only when:
-- the form URL in `config.md` is not `TBD`, and
-- 3 or more blocking items are missing (fewer than that: just ask them).
+For `contract_review` and `regulatory_question` tickets on the `one_question_round` path, touch 1 is the **automatic intake invite**: a fixed-text email that the n8n `Legal Intake` workflow sends to the requester from the Legal mailbox, with the form link and the ticket key prefilled, when `/triage` calls its invite trigger (`/triage` Step 4b item 4). It replaces the question list. The conditions, all required:
+- the form URL in `config.md` is not `TBD`,
+- 3 or more blocking items are missing (fewer than that: just ask them in the draft),
+- the ticket is two-touch eligible, has no risk flag and no `human_review_required`,
+- the ticket did not come from the form and carries no `intake:form-sent` label or `Intake-Invite:` comment.
 
-The link carries the ticket key, so the submission comes back as an `Intake-Form:` **comment on the same ticket** (plus the `intake:form` label and any uploaded files). No second ticket is created. The Copilot re-triages the ticket with the new facts (`/triage` Step 3 treats that comment as the requester's reply); the answer is touch 2, counted on the same ticket as touch 1.
+The link carries the ticket key, so the submission comes back as an `Intake-Form:` **comment on the same ticket** (plus the `intake:form` label and any uploaded files). No second ticket is created. The Copilot re-triages the ticket with the new facts (`/triage` Step 3 treats that comment as the requester's reply); the answer is touch 2, counted on the same ticket as touch 1. `/reply-and-close` counts the invite as one touch from the `intake:form-sent` label.
 
-Never send the form link on a ticket that already carries an `Intake-Form:` block, whether in its description or in a comment.
+Never trigger the invite on a ticket that already carries an `Intake-Form:` or `Intake-Invite:` comment, or the `intake:form` / `intake:form-sent` label. If the invite call fails, fall back to the questions in the draft and say so.
 
 ---
 

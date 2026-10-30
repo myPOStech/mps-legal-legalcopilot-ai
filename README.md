@@ -51,7 +51,9 @@ You should only need to do this once on each machine you install on.
 
 ### Triage a single ticket on demand
 
-> **New in 0.5.1.** The intake forms are live for the beta. When a contract review or regulatory question needs three or more facts only the requester has, the Copilot's draft sends them a short form link with their ticket number already filled in (`knowledge/config.md`, "Intake forms (beta)"). Their answers land as a comment on the same ticket and the Copilot re-triages it; no second ticket is created. The forms ask for the shared Legal login published on the internal SharePoint page.
+> **New in 0.5.2.** The intake-form invitation is now sent automatically. When a contract review or regulatory question is missing three or more facts, the n8n workflow emails the requester a fixed, clearly labelled AI-generated invitation with the form link and their ticket number, posts "Intake-Invite: sent" on the ticket, and the Copilot waits for the answers before drafting. The forms are open links now (no shared login). Filing failures from SharePoint come back as a clear "sharepoint_upload_failed" error instead of a timeout.
+
+> **New in 0.5.1.** The intake forms are live for the beta. When a contract review or regulatory question needs three or more facts only the requester has, the Copilot's draft sends them a short form link with their ticket number already filled in (`knowledge/config.md`, "Intake forms (beta)"). Their answers land as a comment on the same ticket and the Copilot re-triages it; no second ticket is created. The forms asked for a shared Legal login (dropped in 0.5.2).
 
 > **New in 0.5.0.** Due dates come from one risk-based SLA policy (`knowledge/sla-policy.md`): 14 days for non-critical tickets, 3 to 6 months for projects, tighter only for critical matters or hard external deadlines. Non-critical drafts aim to close in **two interactions** with the requester (`knowledge/two-touch-rule.md`): at most 3 questions, everything else stated as an assumption. Intake forms for contract and regulatory requests are specified in `docs/n8n-intake-form.md` (beta, not live yet). Unattended runs are no longer blocked by permission prompts: the plugin ships a permission hook (`hooks/hooks.json`) that allows its read, draft-create, Jira and n8n tools, and `/setup-copilot` now checks that the policy files scheduled runs fall back to are on SharePoint at the current version.
 
@@ -169,7 +171,7 @@ You can change folder names by editing one file in the plugin: `knowledge/sharep
 
 ## Safety rails (hard rules, never overridden)
 
-- **Never sends emails** -- drafts only (Jira comment, SharePoint .docx, and your Outlook Drafts folder when available); the lawyer always sends
+- **Never sends emails itself** -- drafts only (Jira comment, SharePoint .docx, and your Outlook Drafts folder when available); the lawyer always sends. One agreed exception since 30 Oct 2026: when a contract or regulatory request is missing three or more facts, the n8n workflow emails the requester a fixed intake-form invitation (text in `docs/n8n-intake-form.md`); the Copilot cannot change its wording and never sends anything else
 - **Never closes a risk-flagged ticket** -- regulator, inspection, claim, or tight-deadline tickets always require a lawyer to approve before close
 - **Never auto-edits its own rules** -- when it spots a recurring lawyer correction, it proposes a change and waits for sign-off
 - **Never invents facts** -- if information is missing, it asks

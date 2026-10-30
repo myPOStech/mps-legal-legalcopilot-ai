@@ -216,7 +216,7 @@ File the run summary via the n8n workflow under `_runs/triage-board/RUN-{date}-b
 
 ## Hard rules
 
-- NEVER send emails. The Copilot only creates drafts (Jira comment, SharePoint .docx, and a native Outlook draft when `outlook_create_reply_draft` / `outlook_create_draft` is available); the lawyer sends from Outlook. Never call `outlook_send_mail`, `outlook_send_draft` or `outlook_forward_mail` (see `/triage` Step 9).
+- NEVER send emails from the Copilot's own tools. The Copilot only creates drafts (Jira comment, SharePoint .docx, and a native Outlook draft when `outlook_create_reply_draft` / `outlook_create_draft` is available); the lawyer sends from Outlook. Never call `outlook_send_mail`, `outlook_send_draft` or `outlook_forward_mail` (see `/triage` Step 9). The one agreed exception is the automatic intake invite, a fixed-text email sent by the n8n `Legal Intake` workflow under the conditions of `/triage` Step 4b item 4; count the invites sent in the run summary.
 - NEVER auto-close a triaged ticket. Closing is lawyer-gated via `/reply-and-close`. Only confirmed duplicates auto-close.
 - NEVER auto-edit any skill. Propose patterns, wait for human approval.
 - NEVER bypass the n8n workflow for SharePoint writes.

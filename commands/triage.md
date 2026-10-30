@@ -61,7 +61,7 @@ Plus the bundled seed knowledge in `${CLAUDE_PLUGIN_ROOT}/knowledge/`:
 
 **Intake form submissions** (`docs/n8n-intake-form.md`) arrive in one of two places:
 - as the ticket **description** starting with an `Intake-Form:` line (the requester came to the form on their own; new-ticket mode), or
-- as a **comment** starting with an `Intake-Form:` line on a ticket that already has an AI Triage comment (the Copilot sent the form link as touch 1; comment mode). Read the original description and the form comment together.
+- as a **comment** starting with an `Intake-Form:` line on a ticket that already has an AI Triage comment (the automatic intake invite went out as touch 1; comment mode). Read the original description and the form comment together.
 
 In both cases read the labelled fields as given facts. Do not ask the requester again for anything the form already answers; a form answer of `Not sure` counts as a gap to assume or ask about in Step 4b. If the block says `Existing-Ticket-Given: {key} (not found)`, mention it in the Step 10 comment so the lawyer can link by hand.
 
@@ -86,7 +86,7 @@ Scan recent `## Case:` entries inside `legal_copilot_memory.md` for >90% similar
 | Conflict (same matter, contradictory asks) | Link both as "relates to", flag, escalate. Stop. |
 | New request | Continue. |
 
-**Re-triage cap:** if the ticket already carries an `## AI Triage` comment and there is NO human comment after it, do NOT run a fresh triage. If the SLA is breached, post one single escalation line mentioning the assignee; otherwise report "already triaged, awaiting lawyer" and stop. An `Intake-Form:` comment posted after the AI Triage comment is the requester's reply (the form answers), so it lifts the cap: re-triage with the new facts, and on this second pass never send the form link again.
+**Re-triage cap:** if the ticket already carries an `## AI Triage` comment and there is NO human comment after it, do NOT run a fresh triage. If the SLA is breached, post one single escalation line mentioning the assignee; otherwise report "already triaged, awaiting lawyer" and stop. Two system comments the n8n `Legal Intake` workflow posts are recognised by their first line, whatever account authored them: `Intake-Invite: sent` (the automatic form invitation went out; the ticket is waiting for the requester) does NOT lift the cap; `Intake-Form:` (the form answers arrived) is the requester's reply and lifts it: re-triage with the new facts, and on this second pass never send the form again.
 
 ---
 
@@ -112,7 +112,12 @@ The chosen skill produces structured output: matter type, priority, SLA suggesti
 1. Decide whether the ticket is two-touch eligible (tier `standard`, or `high` without a critical flag; not a project, claim or inspection; no `full-track` label).
 2. Pick `resolution_path`: `answer_now`, `answer_on_assumptions`, `one_question_round`, or `full_track` (exempt tickets only).
 3. On an eligible ticket, split the skill's missing-information list into `questions_to_ask` (blocking, at most 3) and `assumptions` (everything else). Rewrite the draft so it answers on the assumptions, lists them in an **Assumptions** block, asks only `questions_to_ask` in one message, and has no sequential gating. On a `full_track` ticket, `questions_to_ask` is the skill's full missing-information list (no cap) and `assumptions` is empty; Step 10 prints it under "Missing information".
-4. On the `one_question_round` path for `contract_review` / `regulatory_question`, with 3+ blocking gaps and a form URL configured, the draft may send the intake form link instead of the questions. Prefill the ticket key in the link (`docs/n8n-intake-form.md`, "How the Copilot sends the link") and state the key in the text; the answers then come back as a comment on this ticket, not as a new one.
+4. **Automatic intake invite** (the one email the Copilot causes to be sent; decided 30 Oct 2026). When ALL of these hold: matter type `contract_review` or `regulatory_question`; `resolution_path = one_question_round`; 3 or more blocking gaps; `two_touch_eligible = true`; no risk flag and `human_review_required = false`; the ticket has no `intake:form` or `intake:form-sent` label and no `Intake-Form:` / `Intake-Invite:` comment; the form URL in `config.md` is not `TBD`: do not put the questions in a draft. Call the n8n `Legal Intake` workflow's invite trigger instead:
+   ```
+   execute_workflow(workflowId: "FicMGfmDaJxaXBym", executionMode: "production", triggerNodeName: "Invite webhook",
+     inputs: { webhookData: { method: "POST", body: { ticket_key: "{key}", requester_email: "{requester email}", form: "contract-review" | "regulatory-question" } } })
+   ```
+   The workflow validates the input, refuses duplicates (label `intake:form-sent`, ticket from the form, ticket done), emails the requester the fixed invitation text from the Legal mailbox with the link prefilled (`docs/n8n-intake-form.md`, "How the invite is sent"), posts an `Intake-Invite: sent` comment and adds the label `intake:form-sent`. The Copilot never writes that email's text. Record the outcome in `triage_metadata.intake_invite`: `sent` (HTTP 200 `success:true`), `skipped: {reason}` (200 with `skipped`), or `failed: {detail}` (any other answer, or the workflow inactive). On `failed`, fall back to the questions in the draft (max 3) as before and say why in the comment. On `sent`: Step 8 files the Jira attachments and the memory entry only (no draft `.docx`), Step 9 creates no Outlook draft, and the Step 10 comment says the form was sent and that the ticket waits for the answers; the next sweep re-triages when the `Intake-Form:` comment arrives.
 
 Add all of these to `triage_metadata` for Steps 5-8:
 
@@ -233,6 +238,8 @@ The filer validates and base64-encodes the draft `.docx` into the workflow's `do
 
 ## Step 9: Deliver the draft
 
+If `triage_metadata.intake_invite == sent` (Step 4b item 4), there is nothing for the lawyer to send yet: skip this step, and record `Outlook draft: not needed (intake form sent automatically)` in Steps 10 and 11.
+
 Draft delivery has three surfaces, in order of preference:
 
 1. The full draft ALWAYS goes into the "Draft Response" section of the AI Triage Jira comment (Step 10). That comment is the lawyer's primary review surface, and the guaranteed fallback.
@@ -248,7 +255,7 @@ Draft delivery has three surfaces, in order of preference:
 4. n8n fallback, only when step 3 did not produce a verified draft. Call the n8n `search_workflows` tool once per session with query `Legal Copilot Draft`. If it returns workflow `zMZJM8RvzluqLIrl` with `active: true`, call it via `execute_workflow` with `{"ticket_key": "{key}", "subject": "[AI DRAFT {key}] Re: {original subject}", "body_html": "{final_draft as HTML}", "to": ["{requester email}"]}` and include the returned `webLink`. If the workflow is missing or inactive, skip it.
 5. **Always record one line**, in Steps 10 and 11 and in the `/triage-board` summary: `Outlook draft: created (subject [AI DRAFT {key}] Re: ...)` or `Outlook draft: NOT created, reason: {tool declined | not allowed | no draft tool | no message id | not found in Drafts after retry | error text}`. A missing draft never halts the triage (the Jira comment and SharePoint `.docx` are enough), but a missing reason line is a defect: drafts stopped appearing after 14 Oct 2026 and no run said why.
 
-Never call any tool whose suffix is `outlook_send_mail`, `outlook_send_draft` or `outlook_forward_mail`. Creating a draft is allowed; sending is not.
+Never call any tool whose suffix is `outlook_send_mail`, `outlook_send_draft` or `outlook_forward_mail`. Creating a draft is allowed; sending is not. The automatic intake invite is not an exception to this line: it is sent by the n8n workflow, never by a Copilot tool.
 
 ---
 
@@ -268,6 +275,7 @@ Post the comment with the Atlassian tool whose suffix is `addOrEditJiraIssueComm
 **Fields set:** priority={priority}, due={due_date}{if due_date_kept: " (existing date kept; policy would set " + policy_due_date + ")"}, flagged={yes|no}, labels=[{labels_added}]
 **SLA tier:** {sla_tier} ({sla_basis}{if external_deadline: ", external deadline " + external_deadline}) | **First response target:** {first_response_target}
 **Resolution path:** {resolution_path}{if two_touch_eligible: " (two-touch ticket)"}
+{if intake_invite: "**Intake form:** " + (sent: "sent automatically to {requester email} on {date}; waiting for the answers, no draft until then" | skipped: "not sent ({reason})" | failed: "could not be sent ({detail}); questions asked in the draft instead")}
 
 {if risk flags: "**Risk flags:** {flags}"}
 {if human_review_required: "**NEEDS HUMAN REVIEW BEFORE SEND**"}
@@ -291,7 +299,7 @@ Post the comment with the Atlassian tool whose suffix is `addOrEditJiraIssueComm
 ---
 ## Draft Response (for lawyer to review, edit, and send)
 
-{business reviewer final draft}
+{business reviewer final draft | if intake_invite == sent: "No draft yet: the intake form was sent to the requester automatically. The Copilot drafts the answer once the form answers arrive as an Intake-Form: comment."}
 
 ---
 *Review the Draft Response above (or the SharePoint .docx){if draft webLink: ", or open the [Outlook draft]({webLink})"}. Send your reply from Outlook, then run `/reply-and-close {ticket_key}`.*
@@ -308,6 +316,7 @@ Note: priority, due date, assignee, and flag are NOT repeated here as bullet ite
 Triage complete for {ticket_key}:
   Matter: {type} | Priority: {priority} | SLA: {sla_tier}, {sla_days}d | Due: {due_date}{if due_date_kept: " (existing date kept)"}
   Path: {resolution_path} | Questions asked: {count of questions_to_ask} | Assumed: {count of assumptions}
+  {if intake_invite: "Intake form: " + (sent to {email} | skipped ({reason}) | failed ({detail}), questions asked instead)}
   Assigned to: {assignee_name} ({rule_applied})
   Skill: {legal-triage-skill-name}
   Risk flags: {flags or "none"}
@@ -324,7 +333,8 @@ Triage complete for {ticket_key}:
 
 ## Hard rules
 
-- NEVER send emails (`outlook_send_mail`, `outlook_send_draft`, `outlook_forward_mail` are forbidden even though the connector exposes them). The Copilot only creates drafts; the lawyer reviews and sends from Outlook. The draft lives in the Jira comment, the SharePoint .docx, and (when a draft tool is available) the lawyer's Outlook Drafts folder.
+- NEVER send emails from the Copilot's own tools (`outlook_send_mail`, `outlook_send_draft`, `outlook_forward_mail` are forbidden even though a connector may expose them). The Copilot only creates drafts; the lawyer reviews and sends from Outlook. The draft lives in the Jira comment, the SharePoint .docx, and (when a draft tool is available) the lawyer's Outlook Drafts folder. **The one agreed exception (30 Oct 2026)** is the automatic intake invite of Step 4b item 4: a fixed-text email that the n8n `Legal Intake` workflow sends from the Legal mailbox when `/triage` calls its invite trigger. The Copilot never writes that email and never calls a send tool for it.
+- NEVER trigger the intake invite outside the conditions of Step 4b item 4, and never twice on one ticket.
 - Match Microsoft 365 tools by SUFFIX. The connected connector exposes `outlook_create_draft` and `outlook_create_reply_draft` (create-draft) and `outlook_email_search` (read); it does NOT expose a tool named `outlook_email_create_draft`. Never invent a tool name; if a needed suffix is absent this session, follow the step's documented fallback.
 - NEVER move the ticket to Done. That's `/reply-and-close`'s job.
 - NEVER post priority, due date, deadline, flag, or assignee as a Jira comment. Use the fields.

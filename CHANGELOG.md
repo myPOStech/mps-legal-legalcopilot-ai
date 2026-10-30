@@ -2,6 +2,26 @@
 
 All notable changes to the myPOS Legal Copilot plugin.
 
+## [0.5.2] - 2026-10-30
+
+The intake-form invitation goes out automatically; forms are open links; SharePoint upload failures answer a clear error.
+
+### Changed
+- **Automatic intake invite (the one agreed exception to "the Copilot never sends").** `/triage` Step 4b item 4 no longer puts the form link in a draft. When a `contract_review` / `regulatory_question` ticket is on the `one_question_round` path with 3+ blocking gaps, is two-touch eligible, has no risk flag, did not come from the form and was not invited before, `/triage` calls the n8n `Legal Intake` workflow's `Invite webhook` trigger. The workflow sends a fixed, clearly labelled AI-generated invitation from the Legal mailbox with the link and ticket key prefilled, posts an `Intake-Invite: sent` comment and adds the label `intake:form-sent`. The Copilot cannot change the text and never calls a send tool. On any failure it falls back to asking its (max 3) questions in the draft. Step 9 creates no Outlook draft when the invite was sent; the Step 10 comment says the ticket is waiting for the answers. Hard rules in `/triage`, `/triage-board`, `/triage-inbox`, `/reply-and-close`, the README safety rails and `hooks/README.md` state the exception.
+- **`/triage` Step 3:** `Intake-Invite: sent` and `Intake-Form:` comments are system comments whoever authored them; the first does not lift the re-triage cap, the second does.
+- **`/reply-and-close` Step 4b:** the invite counts as one touch, read from the `intake:form-sent` label.
+- **Forms are open links.** The shared basic-auth login is dropped (both form triggers: authentication none). The workflow still rejects non-`@mypos.com` requesters and ignores bots. `knowledge/config.md` (policy version 0.5.2: copy it to SharePoint again) and `docs/n8n-intake-form.md` updated, including the invite text and the trigger contract.
+- **`sharepoint-filer`:** new error code `sharepoint_upload_failed` (HTTP 502 from the filing workflow once change 1 of the 30 Oct review is published): a document upload failed after 3 retries, nothing was recorded, retry the whole filing. `docs/n8n-legal-copilot-workflow.md` documents the change and the guard added to it.
+
+### n8n side (outside this repo, both drafts, publishing is manual)
+- `Legal Intake` (`FicMGfmDaJxaXBym`): invite trigger branch (10 nodes), forms without login. Needs a Microsoft Outlook credential on `Send intake invite` before publishing.
+- `Legal Copilot` (`VAKq9Bra0RA0SdCO`): change 1 of the 30 Oct weekly review, with a guard so a partial upload failure cannot answer 200.
+
+### Plugin version
+- Bumped to **0.5.2**. Run `/plugin update`; copy `config.md` to the SharePoint `_knowledge` folder; run `/setup-copilot`.
+
+---
+
 ## [0.5.1] - 2026-10-29
 
 Intake forms go live: production URLs in `knowledge/config.md`, prefill parameter corrected, workflow built and tested.

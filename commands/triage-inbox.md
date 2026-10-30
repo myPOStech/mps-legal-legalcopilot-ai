@@ -124,7 +124,7 @@ Inbox triage complete: {N} emails processed
 
 ## Hard rules
 
-- NEVER send emails or reply to the source email. No send tool exists; the lawyer replies after review.
+- NEVER send emails or reply to the source email from the Copilot's own tools; the lawyer replies after review. The one agreed exception is the automatic intake invite, a fixed-text email sent by the n8n `Legal Intake` workflow under the conditions of `/triage` Step 4b item 4.
 - NEVER attempt to mark an email read, tag it, or move it -- no mail-write tool exists. Idempotency = Jira dedupe + `processed_message_id` log in the memory file.
 - NEVER create a ticket without embedding the `Source-Message-Id` in the description.
 - NEVER post the AI Triage comment for a ticket whose n8n filing failed.

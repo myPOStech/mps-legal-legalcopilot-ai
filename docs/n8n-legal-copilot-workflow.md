@@ -22,11 +22,24 @@ Max 10 documents per call; each document max ~8 MB once base64-encoded (about 6 
 | 200 | `{success, case_id, message, documents_filed[], memory_file_updated, memory_file_path}` | Filed. Check each `documents_filed[].status`; `success_but_empty` is a failure. `fetch_failed` (a `documents_from_jira` attachment n8n could not download, with a `reason`) is reported but does not set `success: false`. |
 | 400 | `{success:false, error}` | `case_id` / `case_folder` missing or `case_folder` contains the `case_id`. |
 | 422 | `{success:false, error}` | Payload rejected in `Resume State`: `docx_invalid: ...`, too many documents, oversize document, malformed `text_documents` / `documents_from_jira` item. |
-| error / timeout | n/a | Upload or memory step failed after 3 retries, or `memory_download_failed` (the memory file could not be read, so it was not overwritten). Treat as `success:false`. |
+| 502 | `{success:false, error:'sharepoint_upload_failed', detail, filename}` | A document upload failed after 3 retries (change 1 of 30 Oct 2026, live once that version is published). The memory file was not touched and no other document counts as filed: retry the whole filing. |
+| error / timeout | n/a | Memory step failed after 3 retries, or `memory_download_failed` (the memory file could not be read, so it was not overwritten). Treat as `success:false`. |
 
-## 2026-10-27: FIX-A (weekly usage review of 23 Oct 2026), draft version `8773470a`, NOT YET PUBLISHED
+## 2026-10-30: change 1 (weekly review of 30 Oct 2026), draft, NOT YET PUBLISHED
 
-Rollback target: version `bccb4e14` (7 Oct 2026, still the live version until `8773470a` is published).
+Rollback target: version `8773470a` (FIX-A, published 29 Oct 2026, live until this version is published).
+
+Proposal: a SharePoint upload that still fails after 3 retries should answer a clear error instead of a generic workflow error / timeout. Applied as proposed, with one guard the proposal lacked:
+
+- `Upload Document to SharePoint`: `onError: continueErrorOutput` (retries unchanged).
+- New `Respond Upload Failed` on the error output: HTTP 502 `{success:false, error:'sharepoint_upload_failed', detail, filename}`.
+- `Collect Upload Results`: if any upload item landed on the error output (`$('Upload Document to SharePoint').all(1)`), it returns no items. Without this, a run where 1 of 3 files failed would have carried the 2 good files to a 200 "success" response with the failed file silently missing, and the 502 would have collided with the response already sent. With it, the memory file is not appended and the only answer is the 502; the plugin halts and the lawyer retries the whole filing (uploads overwrite).
+
+Plugin side: `sharepoint-filer` maps the 502 to `success:false, error: sharepoint_upload_failed` and names the file.
+
+## 2026-10-27: FIX-A (weekly usage review of 23 Oct 2026), version `8773470a`, published 29 Oct 2026
+
+Rollback target: version `bccb4e14` (7 Oct 2026).
 
 Problem (F-1): `Fetch Jira Attachment` was blocked by the n8n Cloud SSRF guard (Jira's attachment host resolves to private IPs: execs 25235 on 12 Oct and 26726 on 14 Oct). The error aborted the whole filing, so the `LEGAL-5886` and `LEGAL-5915` case folders were created with 0 files.
 
