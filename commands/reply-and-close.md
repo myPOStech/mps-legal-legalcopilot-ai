@@ -5,7 +5,7 @@ argument-hint: <TICKET-KEY> [--dry-run]
 
 # /reply-and-close
 
-**The Copilot never sends email.** `/triage` may have left an AI draft in the lawyer's Outlook Drafts folder (subject starts `[AI DRAFT {ticket_key}]`), but sending is always the lawyer's act. The flow is therefore lawyer-sends-first:
+**The Copilot never sends email itself.** `/triage` may have left an AI draft in the lawyer's Outlook Drafts folder (subject starts `[AI DRAFT {ticket_key}]`), but sending is always the lawyer's act. (The one automatic email, the intake-form invite, is sent by the n8n workflow at triage; see `/triage` Step 4b item 4. It counts as a touch below.) The flow is therefore lawyer-sends-first:
 
 1. The lawyer reviews the AI draft (Outlook draft, the ticket's AI Triage comment, or the SharePoint .docx), edits it, and **sends the reply themselves from Outlook**.
 2. This command then: verifies the sent email exists, diffs it against the AI draft, files the sent email + any new documents to SharePoint via the n8n workflow, appends a feedback entry to the shared memory file, and transitions the Jira ticket to Done.
@@ -81,8 +81,8 @@ Compare the sent body against the AI draft from Step 1:
 
 Count the **touches** on this matter (definition in `knowledge/two-touch-rule.md`: a message from Legal to the requester that delivers the answer or asks them for something; acknowledgements and Copilot-only Jira comments do not count):
 
-- Sent emails to the requester since the ticket was created: `outlook_email_search` on `Sent Items` (and the shared legal mailbox if (b) in Step 2) with the ticket key or summary keywords, `afterDateTime` = the ticket's `created` date. Count each distinct message once, including the reply found in Step 3. An intake-form link sent to the requester is a touch (the form answers then arrive as a comment on this same ticket, so both touches are counted here).
-- Jira comments by legal-team members (roster in `knowledge/team-routing.md`) that ask the requester something or give them the answer.
+- Sent emails to the requester since the ticket was created: `outlook_email_search` on `Sent Items` (and the shared legal mailbox if (b) in Step 2) with the ticket key or summary keywords, `afterDateTime` = the ticket's `created` date. Count each distinct message once, including the reply found in Step 3. - The automatic intake invite: if the ticket carries the label `intake:form-sent` or an `Intake-Invite: sent` comment, count exactly one touch for it (the email went out from the Legal mailbox, not from the lawyer's Sent Items). The form answers then arrive as a comment on this same ticket, so both touches are counted here.
+- Jira comments by legal-team members (roster in `knowledge/team-routing.md`) that ask the requester something or give them the answer. `Intake-Invite:` and `Intake-Form:` comments are system comments, not lawyer comments, whoever authored them.
 
 Read `two_touch_eligible` from the ticket's `path:*` label (`path:full_track` = not eligible; no `path:*` label = triaged before 0.5.0, treat as not eligible). Record `touches = N`. If the ticket is eligible and `N > 2`, set `two_touch_breached = true` and note in one line why (e.g. "requester sent the contract only after the second ask"). The lawyer can correct the count in Step 5.
 
@@ -194,7 +194,7 @@ Filed and closed {ticket_key}:
 
 ## Hard rules
 
-- NEVER send email. Only the lawyer sends. This command verifies and files what was sent.
+- NEVER send email from the Copilot's own tools. Only the lawyer sends; the automatic intake invite is sent by the n8n workflow at triage, never here. This command verifies and files what was sent.
 - NEVER call any tool whose suffix is `outlook_send_mail`, `outlook_send_draft` or `outlook_forward_mail`, even though the connector exposes them.
 - NEVER file or close without explicit `y` confirmation in Step 5 (unless `--dry-run`, which changes nothing).
 - NEVER close a `human_review_required` or risk-flagged ticket without the lawyer's `approved for send` / `risk reviewed` Jira comment.

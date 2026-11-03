@@ -56,7 +56,7 @@ Returns:
 | `memory_file_updated` | Boolean. True when the workflow successfully re-uploaded the memory file. |
 | `attachments_not_filed` | List of `{filename, reason}` for attachments skipped as signature / inline images, too large to inline, or `fetch_failed` in the workflow. Callers print it as `Attachments not filed: ...` in the Jira comment. Empty list when everything was filed. |
 | `chat_summary` | A multi-line string ready to print to chat (and to embed in the Jira comment) summarising what was filed and where. |
-| `error` | When `success: false`, a short machine-readable error code (e.g., `document_too_large_to_inline`, `workflow_http_error`, `workflow_rejected_payload`, `n8n_mcp_unavailable`). |
+| `error` | When `success: false`, a short machine-readable error code (e.g., `document_too_large_to_inline`, `workflow_http_error`, `workflow_rejected_payload`, `sharepoint_upload_failed`, `n8n_mcp_unavailable`). |
 
 ---
 
@@ -303,7 +303,7 @@ Build the skill's return object from this:
 }
 ```
 
-If the workflow returns `success: false` OR HTTP non-200 (HTTP 422 with `{success:false, error}` means the workflow rejected the payload in validation: missing/invalid `case_folder`, invalid `.docx`, too many documents), surface the full error in `chat_summary` and return `success: false`. The caller MUST NOT proceed to "post triage comment to Jira" or "transition to Done" if `success: false`.
+If the workflow returns `success: false` OR HTTP non-200 (HTTP 422 with `{success:false, error}` means the workflow rejected the payload in validation: missing/invalid `case_folder`, invalid `.docx`, too many documents; HTTP 502 with `error: sharepoint_upload_failed` means a document upload failed after the workflow's 3 retries, `filename` names it, and nothing was recorded in the memory file, so the whole filing can simply be retried), surface the full error in `chat_summary` and return `success: false` with the workflow's error code. The caller MUST NOT proceed to "post triage comment to Jira" or "transition to Done" if `success: false`.
 
 ---
 
